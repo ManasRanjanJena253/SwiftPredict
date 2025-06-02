@@ -1,5 +1,4 @@
 # Importing dependencies
-from Backend.app.api.logging import log_param, log_metric
 import uuid
 from Backend.app.core.config import db
 from datetime import datetime
@@ -19,9 +18,10 @@ class SwiftPredict :
         await run.insert_one(param)
 
     async def log_metric(self, step, key, value):
-        metric = {"step": step, "value": value}
-        await run.update_one({"run_id": self.run_id, "key": key, "project_name": self.project_name},
-                             {"$push": {"items": metric}})  # Appending the steps into the array of metrics, to create a time series data to plot more easily.
+        await run.update_one({"run_id": self.run_id, "project_name": self.project_name},
+                             {"$set": {"metrics.metric": key}},
+                              {"$push": {"metrics.details.step": step, "metrics.details.value": value}})
+
 
     async def log_params(self, params: dict):
         for key, value in params.items():

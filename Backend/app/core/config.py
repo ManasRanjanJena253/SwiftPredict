@@ -9,16 +9,31 @@ validator = {
         "bsonType": "object",
         "required": ["run_id", "created_at", "project_name"],
         "properties": {
-            "run_id": {"bsonType": "int"},
+            "run_id": {"bsonType": "string"},
             "project_name": {"bsonType": "string"},
             "created_at": {"bsonType": "Date"},
             "tags": {"bsonType": "array",
                      "items": {"bsonType": "string"}
                      },
             "notes": {"bsonType": "string"},
-            "params": {"bsonType": "object"},
-            "metrics": {"bsonType": "array",
-                        "items": {"bsonType": "object"}
+            "params": {"bsonType": "object",
+            "required": ["key", "value"],
+                       "properties": {
+                           "key": {"bsonType": "string"}
+                       }},
+            "metrics": {"bsonType": "object",    # metrics = {metric: Name of the metric, details: {step:[all the steps], value: [ALl the corresponding values]}
+                       "required": ["metric", "details"],
+                        "properties": {
+                            "metric": {"bsonType": "string"},
+                            "details": {"bsonType": "object",
+                                       "items": {"bsonType": "object",
+                                                 "required": ["step", "value"],
+                                                 "properties": {
+                                                     "step": {"bsonType": "integer"},
+                                                     "value": {"bsonType": "array",
+                                                               "items": {"bsonType": "double"}}
+                                                 }}}
+                        }
                         },
             "status": {"bsonType": "string"}
         }

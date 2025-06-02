@@ -4,3 +4,4 @@ motor
 uvicorn
 pymongo
 matplotlib
+seaborn
