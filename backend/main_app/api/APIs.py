@@ -1,14 +1,19 @@
 # Importing dependencies
-from Backend.app.core.config import db
+from backend.main_app.core.config import db
 from fastapi import FastAPI
 import uuid
 from datetime import datetime
 import matplotlib.pyplot as plt
 from fastapi.responses import StreamingResponse
 from io import BytesIO
+import uvicorn
 
-run = db["Run"]
 app = FastAPI()
+run = db["Run"]
+
+def serialize_doc(doc):
+    doc["_id"] = str(doc["_id"])  # convert ObjectId to string
+    return doc
 
 @app.post("{project_name}/runs/{run_id}/log_param")
 async def log_param(key: str, value, run_id: str, project_name: str):
@@ -24,9 +29,9 @@ async def log_param(key: str, value, run_id: str, project_name: str):
     if data:
         param = {"run_id": run_id, "key": key, "value": value, "created_at": datetime.now(), "project_name": project_name}
         await run.insert_one(param)
-        return run.find_one({"run_id": run_id})
+        return serialize_doc(run.find_one({"run_id": run_id}))
     else:
-        return f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"
+        return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"}
 
 @app.post("{project_name}/runs/{run_id}/log_metric")
 async def log_metric(key: str, value, step: int, run_id: str, project_name: str):
@@ -44,8 +49,9 @@ async def log_metric(key: str, value, step: int, run_id: str, project_name: str)
         await run.update_one({"run_id": run_id, "project_name": project_name},
                              {{"$set": {"metrics.metric": key}},
                               {"$push": {"metrics.details.step": step, "metrics.details.values": value}}})
+
     else:
-        return f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"
+        return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"}
 
 @app.post("{project_name}/runs/{run_id}/add_tags")
 async def add_tags(run_id: str, project_name: str, tags: list):
@@ -62,7 +68,7 @@ async def add_tags(run_id: str, project_name: str, tags: list):
                              {"$push": {"tags": tags}})
         return run.find_one({"run_id": run_id, "project_name": project_name})
     else:
-        return f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"
+        return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"}
 
 @app.post("{project_name}/runs/{run_id}/update_status")
 async def update_status(run_id: str, project_name: str, status: str):
@@ -79,7 +85,7 @@ async def update_status(run_id: str, project_name: str, status: str):
                              {"status": status})
         return run.find_one({"run_id": run_id, "project_name": project_name})
     else:
-        return f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"
+        return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"}
 
 @app.post("{project_name}/runs/{run_id}/add_notes")
 async def add_notes(run_id: str, project_name: str, notes: str):
@@ -96,7 +102,7 @@ async def add_notes(run_id: str, project_name: str, notes: str):
                              {"notes": notes})
         return run.find_one({"run_id": run_id, "project_name": project_name})
     else:
-        return f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"
+        return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"}
 
 
 @app.get("{project_name}/runs/{run_id}")
@@ -107,11 +113,12 @@ async def fetch_run_id(run_id: str, project_name: str):
     :param project_name: The name of the project.
     :return: The updated data.
     """
-    data = await run.find({"run_id": run_id, "project_name": project_name})
-    if data:
+    docs = await run.find({"run_id": run_id, "project_name": project_name})
+    if docs:
+        data = [serialize_doc(doc) async for doc in docs]
         return data
     else:
-        return f"Run_Id : {run_id}, DOESN'T EXIST"
+        return {"Error": f"Run_Id : {run_id}, DOESN'T EXIST"}
 
 @app.get("/projects")
 async def get_all_projects():
@@ -119,11 +126,12 @@ async def get_all_projects():
     Used to get all distinct projects you have created.
     :return: List of projects.
     """
-    projects = run.distinct("project_name")
+    projects = await run.distinct("project_name")
+
     if projects:
         return projects
     else:
-        return "No, Projects made/saved yet."
+        return {"Error": "No, Projects made/saved yet."}
 
 @app.get("/{project_name}/{run_id}/plots")
 async def plot_metric(metric: str, run_id: str, project_name: str):
@@ -146,7 +154,7 @@ async def plot_metric(metric: str, run_id: str, project_name: str):
         plt.ylabel(metric)
         plt.title(f"{metric} Over Time")
 
-        #fig = plt.gcf()
+        # fig = plt.gcf()
         # return fig, This statement will raise an error as fig is a python object and not a web serializable response, So we need to stream this in the form of binary streams.
 
         buf = BytesIO()
@@ -156,4 +164,7 @@ async def plot_metric(metric: str, run_id: str, project_name: str):
         return StreamingResponse(buf, media_type = "image/png")
 
     else:
-        return f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST OR The metrics field DOESN'T EXIST."
+        return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST OR The metrics field DOESN'T EXIST."}
+
+if __name__ == '__main__':   # Code to run the code without using the command prompt.
+    uvicorn.run(app, host = '127.0.0.1', port = 9000)

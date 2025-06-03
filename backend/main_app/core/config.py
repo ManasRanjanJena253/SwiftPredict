@@ -41,13 +41,23 @@ validator = {
     }
 }
 
-# Creating the "Run" collection
-collections = db.list_collection_names()
-if "Run" not in collections :
-    db.create_collection(name = "Run",
+async def check_collection():
+    collections = await db.list_collection_names()
+    if "Run" in collections:
+        return True
+    else:
+        return False
+
+async def create_collection():
+    await db.create_collection(name = "Run",
                          validator = validator,
                          warning = "error")
     print("Run Collection Created")
+
+# Creating the "Run" collection
+
+if not check_collection() :
+    create_collection()
 
 else :
     print("The Run collection already exists")

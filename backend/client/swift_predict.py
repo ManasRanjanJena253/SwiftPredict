@@ -1,6 +1,6 @@
 # Importing dependencies
 import uuid
-from Backend.app.core.config import db
+from main_app.core.config import db
 from datetime import datetime
 
 run = db["Run"]
