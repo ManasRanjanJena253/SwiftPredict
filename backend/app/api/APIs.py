@@ -1,5 +1,4 @@
 # Importing dependencies
-from backend.main_app.core.config import db
 from fastapi import FastAPI
 import uuid
 from datetime import datetime
@@ -7,15 +6,14 @@ import matplotlib.pyplot as plt
 from fastapi.responses import StreamingResponse
 from io import BytesIO
 import uvicorn
+from motor.motor_asyncio import AsyncIOMotorClient
 
 app = FastAPI()
+client = AsyncIOMotorClient("mongodb://localhost:27017")
+db = client["SwiftPredict"]
 run = db["Run"]
 
-def serialize_doc(doc):
-    doc["_id"] = str(doc["_id"])  # convert ObjectId to string
-    return doc
-
-@app.post("{project_name}/runs/{run_id}/log_param")
+@app.post("/{project_name}/runs/{run_id}/log_param")
 async def log_param(key: str, value, run_id: str, project_name: str):
     """
     Used to log the parameters used when training a certain model.
@@ -25,15 +23,15 @@ async def log_param(key: str, value, run_id: str, project_name: str):
     :param project_name: The name of the project.
     :return: The updated data.
     """
-    data = await run.find({"run_id": run_id, "project_name": project_name})
+    data = await run.find_one({"run_id": run_id, "project_name": project_name})
     if data:
         param = {"run_id": run_id, "key": key, "value": value, "created_at": datetime.now(), "project_name": project_name}
         await run.insert_one(param)
-        return serialize_doc(run.find_one({"run_id": run_id}))
+        return await run.find_one({"run_id": run_id}, {"_id": 0})
     else:
         return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"}
 
-@app.post("{project_name}/runs/{run_id}/log_metric")
+@app.post("/{project_name}/runs/{run_id}/log_metric")
 async def log_metric(key: str, value, step: int, run_id: str, project_name: str):
     """
     Used to log the metrics used for evaluation of the model.
@@ -44,16 +42,18 @@ async def log_metric(key: str, value, step: int, run_id: str, project_name: str)
     :param project_name: The name of the project.
     :return: The updated data.
     """
-    data = await run.find({"run_id": run_id, "project_name": project_name})
+    data = await run.find_one({"run_id": run_id, "project_name": project_name})
     if data:
         await run.update_one({"run_id": run_id, "project_name": project_name},
-                             {{"$set": {"metrics.metric": key}},
-                              {"$push": {"metrics.details.step": step, "metrics.details.values": value}}})
+                             {"$set": {"metrics.metric": key},
+                              "$push": {"metrics.details.step": float(step), "metrics.details.values": float(value)}})
+
+        return await run.find_one({"run_id": run_id, "project_name": project_name}, {"_id": 0})
 
     else:
         return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"}
 
-@app.post("{project_name}/runs/{run_id}/add_tags")
+@app.post("/{project_name}/runs/{run_id}/add_tags")
 async def add_tags(run_id: str, project_name: str, tags: list):
     """
     Used to add tags to already created runs.
@@ -62,15 +62,15 @@ async def add_tags(run_id: str, project_name: str, tags: list):
     :param tags: List of tags you want to provide to a particular run.
     :return: The updated data.
     """
-    data = await run.find({"run_id": run_id, "project_name": project_name})
+    data = await run.find_one({"run_id": run_id, "project_name": project_name})
     if data:
         await run.update_one({"run_id": run_id, "project_name": project_name},
                              {"$push": {"tags": tags}})
-        return run.find_one({"run_id": run_id, "project_name": project_name})
+        return run.find_one({"run_id": run_id, "project_name": project_name}, {"_id": 0})
     else:
         return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"}
 
-@app.post("{project_name}/runs/{run_id}/update_status")
+@app.post("/{project_name}/runs/{run_id}/update_status")
 async def update_status(run_id: str, project_name: str, status: str):
     """
     Used to add tags to already created runs.
@@ -79,15 +79,15 @@ async def update_status(run_id: str, project_name: str, status: str):
     :param status: The current running status of the project.
     :return: The updated data.
     """
-    data = await run.find({"run_id": run_id, "project_name": project_name})
+    data = await run.find_one({"run_id": run_id, "project_name": project_name})
     if data:
         await run.update_one({"run_id": run_id, "project_name": project_name},
                              {"status": status})
-        return run.find_one({"run_id": run_id, "project_name": project_name})
+        return run.find_one({"run_id": run_id, "project_name": project_name}, {"_id": 0})
     else:
         return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"}
 
-@app.post("{project_name}/runs/{run_id}/add_notes")
+@app.post("/{project_name}/runs/{run_id}/add_notes")
 async def add_notes(run_id: str, project_name: str, notes: str):
     """
     Used to add tags to already created runs.
@@ -96,16 +96,16 @@ async def add_notes(run_id: str, project_name: str, notes: str):
     :param notes: For experiment description/logging.
     :return: The updated data.
     """
-    data = await run.find({"run_id": run_id, "project_name": project_name})
+    data = await run.find_one({"run_id": run_id, "project_name": project_name})
     if data:
         await run.update_one({"run_id": run_id, "project_name": project_name},
                              {"notes": notes})
-        return run.find_one({"run_id": run_id, "project_name": project_name})
+        return run.find_one({"run_id": run_id, "project_name": project_name}, {"_id": 0})
     else:
         return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"}
 
 
-@app.get("{project_name}/runs/{run_id}")
+@app.get("/{project_name}/runs/{run_id}")
 async def fetch_run_id(run_id: str, project_name: str):
     """
     Used to fetch all the data associated with a specific run_id .
@@ -113,10 +113,9 @@ async def fetch_run_id(run_id: str, project_name: str):
     :param project_name: The name of the project.
     :return: The updated data.
     """
-    docs = await run.find({"run_id": run_id, "project_name": project_name})
+    docs = await run.find_one({"run_id": run_id, "project_name": project_name}, {"_id": 0})
     if docs:
-        data = [serialize_doc(doc) async for doc in docs]
-        return data
+        return docs
     else:
         return {"Error": f"Run_Id : {run_id}, DOESN'T EXIST"}
 
@@ -127,14 +126,13 @@ async def get_all_projects():
     :return: List of projects.
     """
     projects = await run.distinct("project_name")
-
     if projects:
         return projects
     else:
         return {"Error": "No, Projects made/saved yet."}
 
-@app.get("/{project_name}/{run_id}/plots")
-async def plot_metric(metric: str, run_id: str, project_name: str):
+@app.get("/{project_name}/plots")
+async def plot_metrics(metric: str, run_id: str, project_name: str):
     """
     This function takes in the metric name and a list containing dicts containing each iteration(step) and metric value at that instance.
     :param metric: Name of the metric.
@@ -142,7 +140,7 @@ async def plot_metric(metric: str, run_id: str, project_name: str):
     :param project_name: The name of the project.
     :return: Streaming Image.
     """
-    data = await run.find({"run_id": run_id, "project_name": project_name, "metrics.metric": metric})
+    data = await run.find_one({"run_id": run_id, "project_name": project_name, "metrics.metric": metric.lower()})
     if data:
         values = data["metrics"]["details"]
         steps = values["step"]
@@ -151,8 +149,8 @@ async def plot_metric(metric: str, run_id: str, project_name: str):
         plt.figure()
         plt.plot(steps, iter_values)
         plt.xlabel("Step")
-        plt.ylabel(metric)
-        plt.title(f"{metric} Over Time")
+        plt.ylabel(metric.title())
+        plt.title(f"{metric.title()} Over Time")
 
         # fig = plt.gcf()
         # return fig, This statement will raise an error as fig is a python object and not a web serializable response, So we need to stream this in the form of binary streams.
