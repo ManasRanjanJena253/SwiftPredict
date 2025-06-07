@@ -10,6 +10,7 @@ from lightgbm import LGBMRegressor, LGBMClassifier
 from sklearn.model_selection import train_test_split, cross_validate
 from imblearn.over_sampling import SMOTE
 from client.swift_predict import SwiftPredict
+from statistics import multimode
 import pandas as pd
 import numpy as np
 
@@ -31,7 +32,7 @@ def handle_null_values(df):
     """
     Handles the null values in a dataset.
     :param df: The dataset in the format of pandas dataframe.
-    :return: A df after all null value issues have been resolved.
+    :return: A pandas dataframe after all null value issues have been resolved.
     """
     total_null_rows = df.isnull().any(axis = 1).sum()   # Will give the total no. of rows having null values.
     total_rows = df.any(axis = 1).sum()   # Gives the total no. of rows in the data.
@@ -58,6 +59,9 @@ def handle_null_values(df):
 
                 else :
                     df[k] = df[k].interpolate(method = "time")
+
+    else:
+        return df
 
 def detect_task(df, y: str):
     """
@@ -105,18 +109,25 @@ def handle_imbalance(df, target_column : str, X_train, y_train):
     else:
         return X_train, y_train
 
-def model_zoo(task):
+def model_zoo(task, model = None):
     """
     Gives the models required for a specific task.
     :param task: The task to be performed on the dataset.
+    :param model: Any optional model if required specifically. OPTIONAL.
     :return: List of models.
     """
     if task == "classification":
         models = [GaussianNB, XGBClassifier, RandomForestClassifier, LGBMClassifier, LogisticRegression]
-        return models
+        if model:
+            return models.append(model)
+        else:
+            return models
     else:
         models = [LinearRegression, XGBRegressor, LGBMRegressor, RandomForestRegressor]
-        return models
+        if model:
+            return models.append(model)
+        else:
+            return models
 
 def train_model(task, X_train, y_train, logger):
     """
@@ -133,14 +144,16 @@ def train_model(task, X_train, y_train, logger):
         avg_precision = []
         avg_roc = []
         models = model_zoo(task = task)
+        trained_models = {}
         scoring_methods = ["accuracy", "f1", "roc_auc", "precision"]
-        for k in models:
+        for k in models:   # Training each classification model in model zoo.
             model = k()
             cv = cross_validate(estimator = model, X = X_train, y = y_train, cv = 10, scoring = scoring_methods)
             acc = cv["test_accuracy"]
             f1 = cv["test_f1"]
             roc = cv["test_roc_auc"]
             precision = cv["test_precision"]
+            trained_models[str(k)] = model.fit(X_train, y_train)
             logger.log_params(model.get_params())
 
             for step in range(len(acc)):
@@ -149,37 +162,102 @@ def train_model(task, X_train, y_train, logger):
                 logger.log_metric(step = step, value = roc[step], key = "roc_auc")
                 logger.log_metric(step = step, value = precision[step], key = "precision")
 
-
             avg_roc.append(roc.mean())
             avg_precision.append(precision.mean())
             avg_f1_score.append(f1.mean())
             avg_acc_scores.append(acc.mean())
 
-        best_models = {"f1": models[avg_f1_score.index(max(avg_f1_score))],
-                       "precision": models[avg_f1_score.index(max(avg_precision))],
-                       "roc_auc": models[avg_f1_score.index(max(avg_roc))],
-                       "accuracy": models[avg_f1_score.index(max(avg_acc_scores))],
-                       "overall": }
+        performers = [
+            avg_acc_scores.index(max(avg_acc_scores)),
+            avg_f1_score.index(max(avg_f1_score)),
+            avg_roc.index(max(avg_roc)),
+            avg_precision.index(max(avg_precision))
+            ]
+
+        overall_best = multimode(performers)
+
+        best_models = {"f1": trained_models[
+            str(models[avg_f1_score.index(max(avg_f1_score))]
+                )],
+                       "precision": trained_models[
+                           str(models[avg_f1_score.index(max(avg_precision))]
+                               )],
+                       "roc_auc": trained_models[
+                           str(models[avg_f1_score.index(max(avg_roc))]
+                                                     )],
+                       "accuracy": trained_models[
+                           str(models[avg_f1_score.index(max(avg_acc_scores))]
+                                                      )],
+                       "overall": [trained_models[str(models[i])] for i in overall_best]}
+
+        return best_models
+
+    else:
+        avg_neg_mse = []
+        avg_neg_mae = []
+        avg_r2 = []
+        trained_models = {}
+
+        models = model_zoo(task = task)
+        scoring_methods = ["neg_mean_squared_error", "neg_mean_absolute_error", "r2"]
+        for k in models:  # Training each classification model in model zoo.
+            model = k()
+            cv = cross_validate(estimator = model, X = X_train, y = y_train, cv = 10, scoring = scoring_methods)
+            neg_mse = cv["test_neg_mean_squared_error"]
+            neg_mae = cv["test_neg_mean_absolute_error"]
+            r2 = cv["test_r2"]
+            trained_models[str(k)] = model.fit(X_train, y_train)
+            logger.log_params(model.get_params())
+
+            for step in range(len(neg_mse)):
+                logger.log_metric(step = step, value = -1 * neg_mse[step], key = "MSE")
+                logger.log_metric(step = step, value = -1 * neg_mae[step], key = "MAE")
+                logger.log_metric(step = step, value = r2[step], key = "R2")
+
+            avg_neg_mse.append(neg_mse.mean())
+            avg_neg_mae.append(neg_mae.mean())
+            avg_r2.append(r2.mean())
+
+        performers = [
+            avg_neg_mae.index(max(avg_neg_mae)),
+            avg_neg_mse.index(max(avg_neg_mse)),
+            avg_r2.index(max(avg_r2)),
+        ]
+
+        overall_best = multimode(performers)
+
+        best_models = {"MAE": trained_models[
+            str(models[avg_neg_mae.index(max(avg_neg_mae))]
+                )],
+                       "MSE": trained_models[
+                           str(models[avg_neg_mse.index(max(avg_neg_mse))]
+                                                 )],
+                       "R2": trained_models[
+                           str(models[avg_r2.index(max(avg_r2))]
+                                                )],
+                       "overall": [trained_models[str(models[i])] for i in overall_best]}
+
+        return best_models
 
 
 
 
-def training_pipeline(df, target):
+def training_pipeline(df, target: str, project_name: str):
     """
     The complete training pipeline.
     :param df: The pandas dataframe of the dataset.
     :param target: The name of the target columns.
+    :param project_name: The name of the project you are working on.
     :return: Scaled and Training ready features.
     """
     logger = SwiftPredict(project_name = "Testing the Automl")
     new_df = df.drop([target], axis = 1)
     columns = get_dtype_columns(new_df)
     cat_columns = columns["categorical"]
-    bool_columns = columns["bool"]
     num_columns = columns["numeric"]
 
     # Getting the task type
-    task = detect_task(new_df, y = target)
+    task = detect_task(df, y = target)
 
     # Handling null values
     new_df = handle_null_values(new_df)
@@ -189,14 +267,15 @@ def training_pipeline(df, target):
     new_df.replace(["Yes", "No"], [1, 0], inplace=True)
 
     # Handling categorical data
-    for k in cat_columns:
-        num_unique_classes = new_df[k].nunique()
-        if num_unique_classes <= 5:  # If the classes in a feature is <= 5, We can use OHE as it won't create dimensionality issues.
-            new_df = pd.concat(new_df.drop([k], axis = 1) + pd.get_dummies(new_df, columns = [k], drop_first = True))
+    for k in new_df.columns.tolist():
+        if k in cat_columns:
+            num_unique_classes = new_df[k].nunique()
+            if num_unique_classes <= 5:  # If the classes in a feature is <= 5, We can use OHE as it won't create dimensionality issues.
+                new_df = pd.concat([new_df.drop([k], axis = 1), pd.get_dummies(new_df[k],drop_first = True)], axis = 1)
 
-        else:
-            freq_map = df[k].value_counts().to_dict()
-            df[f"{k}_frequency"] = df[k].map(freq_map)   # Will map the items to their respective frequencies in the data.
+            else:
+                freq_map = df[k].value_counts().to_dict()
+                df[f"{k}_frequency"] = df[k].map(freq_map)   # Will map the items to their respective frequencies in the data.
 
     # Removing unnecessary columns
     corr = new_df.corr()
@@ -210,11 +289,20 @@ def training_pipeline(df, target):
     y = new_df[target]
     X_train, X_test, y_train, y_test = train_test_split(X, y, stratify = y, random_state = 21)
 
-    # Selecting models
-    models = model_zoo(task = task)
+    # Scaling numerical data
+    std_scaler = StandardScaler()
+    X_scaled= std_scaler.fit_transform(X_train)
+
+    # Handling categorical labels
+    lbl_encoder = LabelEncoder()
+    y_train = lbl_encoder.fit_transform(y_train)
 
     if task == "classification":
-        handle_imbalance(new_df, target_column = target, X_train = X_train, y_train = y_train )
-        for k in models:
-            model = k()   # Initializing the model
+        X_train, y_train = handle_imbalance(new_df, target_column = target, X_train = X_scaled, y_train = y_train )
+
+    best_models = train_model(task = task, X_train = X_train, y_train = y_train, logger = logger)
+
+    return best_models
+
+
 
