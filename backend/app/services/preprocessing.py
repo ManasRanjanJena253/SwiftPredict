@@ -2,9 +2,17 @@
 from sklearn.preprocessing import StandardScaler, LabelEncoder, OneHotEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
+from sklearn.naive_bayes import GaussianNB
+from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from xgboost import XGBRegressor, XGBClassifier
+from lightgbm import LGBMRegressor, LGBMClassifier
+from sklearn.model_selection import train_test_split, cross_validate
 from imblearn.over_sampling import SMOTE
+from client.swift_predict import SwiftPredict
 import pandas as pd
 import numpy as np
+
 
 def get_dtype_columns(df):
     """
@@ -19,13 +27,12 @@ def get_dtype_columns(df):
 
     return {"categorical": cat_columns, "numeric": num_columns, "date": date_columns, "bool": bool_columns}
 
-def handle_null_values(file):
+def handle_null_values(df):
     """
     Handles the null values in a dataset.
-    :param file: The dataset in the format of csv.
+    :param df: The dataset in the format of pandas dataframe.
     :return: A df after all null value issues have been resolved.
     """
-    df = pd.read_csv(file)
     total_null_rows = df.isnull().any(axis = 1).sum()   # Will give the total no. of rows having null values.
     total_rows = df.any(axis = 1).sum()   # Gives the total no. of rows in the data.
 
@@ -98,24 +105,116 @@ def handle_imbalance(df, target_column : str, X_train, y_train):
     else:
         return X_train, y_train
 
-def feature_engineering(df, X_train, y_train):
+def model_zoo(task):
     """
-    For doing the complete feature engineering process.
+    Gives the models required for a specific task.
+    :param task: The task to be performed on the dataset.
+    :return: List of models.
+    """
+    if task == "classification":
+        models = [GaussianNB, XGBClassifier, RandomForestClassifier, LGBMClassifier, LogisticRegression]
+        return models
+    else:
+        models = [LinearRegression, XGBRegressor, LGBMRegressor, RandomForestRegressor]
+        return models
+
+def train_model(task, X_train, y_train, logger):
+    """
+    Used to train the models and log the model results.
+    :param task: The type of task to be performed on the dataset.
+    :param X_train: The training features.
+    :param y_train: The training labels.
+    :param logger: The class used for logging the data.
+    :return: Best Model
+    """
+    if task == "classification":
+        avg_acc_scores = []
+        avg_f1_score = []
+        avg_precision = []
+        avg_roc = []
+        models = model_zoo(task = task)
+        scoring_methods = ["accuracy", "f1", "roc_auc", "precision"]
+        for k in models:
+            model = k()
+            cv = cross_validate(estimator = model, X = X_train, y = y_train, cv = 10, scoring = scoring_methods)
+            acc = cv["test_accuracy"]
+            f1 = cv["test_f1"]
+            roc = cv["test_roc_auc"]
+            precision = cv["test_precision"]
+            logger.log_params(model.get_params())
+
+            for step in range(len(acc)):
+                logger.log_metric(step = step, value = acc[step], key = "accuracy")
+                logger.log_metric(step = step, value = f1[step], key = "f1_score")
+                logger.log_metric(step = step, value = roc[step], key = "roc_auc")
+                logger.log_metric(step = step, value = precision[step], key = "precision")
+
+
+            avg_roc.append(roc.mean())
+            avg_precision.append(precision.mean())
+            avg_f1_score.append(f1.mean())
+            avg_acc_scores.append(acc.mean())
+
+        best_models = {"f1": models[avg_f1_score.index(max(avg_f1_score))],
+                       "precision": models[avg_f1_score.index(max(avg_precision))],
+                       "roc_auc": models[avg_f1_score.index(max(avg_roc))],
+                       "accuracy": models[avg_f1_score.index(max(avg_acc_scores))],
+                       "overall": }
+
+
+
+
+def training_pipeline(df, target):
+    """
+    The complete training pipeline.
     :param df: The pandas dataframe of the dataset.
-    :param X_train: The training features
-    :param y_train: The target.
+    :param target: The name of the target columns.
     :return: Scaled and Training ready features.
     """
-    X = X_train
-    y = y_train
-    columns = get_dtype_columns(df)
+    logger = SwiftPredict(project_name = "Testing the Automl")
+    new_df = df.drop([target], axis = 1)
+    columns = get_dtype_columns(new_df)
+    cat_columns = columns["categorical"]
+    bool_columns = columns["bool"]
+    num_columns = columns["numeric"]
 
+    # Getting the task type
+    task = detect_task(new_df, y = target)
 
+    # Handling null values
+    new_df = handle_null_values(new_df)
 
+    # Handling bool dtypes  and Yes No :
+    new_df.replace(["True", "False"], [1, 0], inplace=True)
+    new_df.replace(["Yes", "No"], [1, 0], inplace=True)
 
+    # Handling categorical data
+    for k in cat_columns:
+        num_unique_classes = new_df[k].nunique()
+        if num_unique_classes <= 5:  # If the classes in a feature is <= 5, We can use OHE as it won't create dimensionality issues.
+            new_df = pd.concat(new_df.drop([k], axis = 1) + pd.get_dummies(new_df, columns = [k], drop_first = True))
 
+        else:
+            freq_map = df[k].value_counts().to_dict()
+            df[f"{k}_frequency"] = df[k].map(freq_map)   # Will map the items to their respective frequencies in the data.
 
+    # Removing unnecessary columns
+    corr = new_df.corr()
+    direct_corr = [col for col in corr.columns if corr[col].abs().max() == 1]   # Getting the columns having correlation 1
+    useful_col_len = len(direct_corr)//2
+    while len(direct_corr) > useful_col_len:
+        new_df.drop([direct_corr.pop()], inplace = True)
 
+    # Splitting the data
+    X = new_df.drop([target], axis = 1)
+    y = new_df[target]
+    X_train, X_test, y_train, y_test = train_test_split(X, y, stratify = y, random_state = 21)
 
+    # Selecting models
+    models = model_zoo(task = task)
 
+    if task == "classification":
+        handle_imbalance(new_df, target_column = target, X_train = X_train, y_train = y_train )
+        for k in models:
+            model = k()   # Initializing the model
 

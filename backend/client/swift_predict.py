@@ -30,7 +30,7 @@ class SwiftPredict :
             await self.run.insert_one(param)
 
     @async_to_sync()
-    async def log_metric(self, step: float, key: str, value):
+    async def log_metric(self, step, key: str, value):
         check = await self.run.find_one({"run_id": self.run_id})
         if check :
             await self.run.update_one({"run_id": self.run_id, "project_name": self.project_name},
