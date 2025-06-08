@@ -1,5 +1,5 @@
-from motor.motor_asyncio import AsyncIOMotorClient
-import asyncio
+# Importing dependencies
+from pymongo import MongoClient
 
 # Defining the schema
 validator = {
@@ -41,13 +41,13 @@ validator = {
 
     }
 
-async def main():
-    client = AsyncIOMotorClient("mongodb://localhost:27017")
+def main():
+    client = MongoClient(host = "localhost", port = 27017)
     db = client["SwiftPredict"]
 
-    collections = await db.list_collection_names()
+    collections = db.list_collection_names()
     if "Run" not in collections:
-        await db.create_collection(
+        db.create_collection(
             name = "Run",
             validator = validator,
             validationAction = "error"
@@ -57,5 +57,5 @@ async def main():
         print("The Run collection already exists")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
 

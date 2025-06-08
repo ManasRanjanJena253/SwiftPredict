@@ -1,7 +1,7 @@
 # Importing dependencies
+from pandas.core.interchange.dataframe_protocol import DataFrame
 from sklearn.preprocessing import StandardScaler, LabelEncoder, OneHotEncoder
-from sklearn.impute import SimpleImputer
-from sklearn.pipeline import Pipeline
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
@@ -22,7 +22,7 @@ def get_dtype_columns(df):
     :return: A dictionary containing the dtype as key and the list of columns of that dtype as values.
     """
     cat_columns = df.select_dtypes(include = ["object"]).columns.tolist()
-    num_columns = df.select_dtypes(include = ["int64", "int32", "float64", "float32"]).columns.tolist()
+    num_columns = df.select_dtypes(include = ["number"]).columns.tolist()
     date_columns = df.select_dtypes(include = ["datetime64[ns]"]).columns.tolist()
     bool_columns = df.select_dtypes(include = ["bool"]).columns.tolist()
 
@@ -52,13 +52,14 @@ def handle_null_values(df):
 
             for k in null_columns:
                 if k in cat_columns or bool_columns:
-                    df[k] = df[k].fillna(value = df[k].mode()[0])
+                    df[k] = df[k].fillna(value = df[k].mode())
 
                 elif k in num_columns:
-                    df[k] = df[k].fillna(value = df[k].mean()[0])
+                    df[k] = df[k].fillna(value = df[k].mean())
 
                 else :
                     df[k] = df[k].interpolate(method = "time")
+        return df
 
     else:
         return df
@@ -97,8 +98,8 @@ def handle_imbalance(df, target_column : str, X_train, y_train):
     """
     target = df[target_column]
     class_counts = target.value_counts().tolist()
-    max_data = class_counts.max()
-    min_data = class_counts.min()
+    max_data = max(class_counts)
+    min_data = min(class_counts)
 
     if min_data/max_data >= 0.15:  # If the min data is less than 15 % of the max data the dataset will be considered imbalanced.
         smote = SMOTE(random_state = 21)
@@ -180,13 +181,13 @@ def train_model(task, X_train, y_train, logger):
             str(models[avg_f1_score.index(max(avg_f1_score))]
                 )],
                        "precision": trained_models[
-                           str(models[avg_f1_score.index(max(avg_precision))]
+                           str(models[avg_precision.index(max(avg_precision))]
                                )],
                        "roc_auc": trained_models[
-                           str(models[avg_f1_score.index(max(avg_roc))]
+                           str(models[avg_roc.index(max(avg_roc))]
                                                      )],
                        "accuracy": trained_models[
-                           str(models[avg_f1_score.index(max(avg_acc_scores))]
+                           str(models[avg_acc_scores.index(max(avg_acc_scores))]
                                                       )],
                        "overall": [trained_models[str(models[i])] for i in overall_best]}
 
@@ -239,25 +240,67 @@ def train_model(task, X_train, y_train, logger):
 
         return best_models
 
+def handle_cat_columns(df, cat_columns):
+    """
+    Used for preprocessing of categorical columns in a dataset.
+    :param df: The pandas dataframe of the dataset.
+    :param cat_columns: The list of categorical column names.
+    :return: updated df and index of fixed columns.
+    """
+    ohe = OneHotEncoder(sparse_output = False)
+    ohe_lst = []
+    new_df = df
+    vectorizer_lst = []
+    for k in new_df.columns.tolist():
+        if k in cat_columns:
+            num_unique_classes = new_df[k].nunique()
+            if num_unique_classes <= 5:  # If the classes in a feature is <= 5, We can use OHE as it won't create dimensionality issue
 
+                transformed_array = ohe.fit_transform(new_df[[k]])
+                transformed_feature_names = ohe.get_feature_names_out([k])
+                transformed_df = pd.DataFrame(transformed_array, columns = transformed_feature_names)
 
+                ohe_lst.append((new_df.columns.get_loc(k), ohe))
 
-def training_pipeline(df, target: str, project_name: str):
+                new_df.drop([k], axis = 1, inplace = True)
+                new_df = pd.concat([new_df, transformed_df], axis = 1)
+
+            else:
+                # TF-IDF vectorize entire column at once
+                vectorizer = TfidfVectorizer()
+                tfidf_array = vectorizer.fit_transform(new_df[k].astype(str)).toarray()
+                tfidf_df = pd.DataFrame(tfidf_array, columns=[f"{k}_tfidf_{i}" for i in range(tfidf_array.shape[1])],
+                                        index=new_df.index)
+                new_df = pd.concat([new_df, tfidf_df], axis=1)
+
+                vectorizer_lst.append((new_df.columns.get_loc(k), vectorizer))  # store vectorizer with original column name
+                new_df.drop(columns=[k], inplace=True)
+
+    return new_df, ohe_lst, vectorizer_lst
+
+def training_pipeline(df, target_column: str, project_name: str):
     """
     The complete training pipeline.
     :param df: The pandas dataframe of the dataset.
-    :param target: The name of the target columns.
+    :param target_column: The name of the target columns.
     :param project_name: The name of the project you are working on.
     :return: Scaled and Training ready features.
     """
-    logger = SwiftPredict(project_name = "Testing the Automl")
-    new_df = df.drop([target], axis = 1)
+    logger = SwiftPredict(project_name = project_name)
+    new_df = df.drop([target_column], axis = 1)
+    target = df[target_column]
     columns = get_dtype_columns(new_df)
     cat_columns = columns["categorical"]
+    print(cat_columns)  # For debugging
     num_columns = columns["numeric"]
+    print(num_columns) # For debugging
+    cat_columns_index = []
+    ohe_lst = []
+    ohe_dict = {}
+    vectorizer_lst = []
 
     # Getting the task type
-    task = detect_task(df, y = target)
+    task = detect_task(df, y = target_column)
 
     # Handling null values
     new_df = handle_null_values(new_df)
@@ -267,26 +310,21 @@ def training_pipeline(df, target: str, project_name: str):
     new_df.replace(["Yes", "No"], [1, 0], inplace=True)
 
     # Handling categorical data
-    for k in new_df.columns.tolist():
-        if k in cat_columns:
-            num_unique_classes = new_df[k].nunique()
-            if num_unique_classes <= 5:  # If the classes in a feature is <= 5, We can use OHE as it won't create dimensionality issues.
-                new_df = pd.concat([new_df.drop([k], axis = 1), pd.get_dummies(new_df[k],drop_first = True)], axis = 1)
-
-            else:
-                freq_map = df[k].value_counts().to_dict()
-                df[f"{k}_frequency"] = df[k].map(freq_map)   # Will map the items to their respective frequencies in the data.
+    if cat_columns:
+        new_df, ohe_lst, vectorizer_lst = handle_cat_columns(df = new_df, cat_columns = cat_columns)
 
     # Removing unnecessary columns
     corr = new_df.corr()
     direct_corr = [col for col in corr.columns if corr[col].abs().max() == 1]   # Getting the columns having correlation 1
     useful_col_len = len(direct_corr)//2
+    removed_columns = []
     while len(direct_corr) > useful_col_len:
-        new_df.drop([direct_corr.pop()], inplace = True)
+        removed_columns.append(new_df.columns.get_loc(direct_corr[- 1]))   # Appending the index of the removed columns
+        new_df.drop([direct_corr.pop()], inplace = True, axis = 1)
 
     # Splitting the data
-    X = new_df.drop([target], axis = 1)
-    y = new_df[target]
+    X = new_df
+    y = target
     X_train, X_test, y_train, y_test = train_test_split(X, y, stratify = y, random_state = 21)
 
     # Scaling numerical data
@@ -294,15 +332,17 @@ def training_pipeline(df, target: str, project_name: str):
     X_scaled= std_scaler.fit_transform(X_train)
 
     # Handling categorical labels
-    lbl_encoder = LabelEncoder()
-    y_train = lbl_encoder.fit_transform(y_train)
+    if y_train.dtype == "string":
+        lbl_encoder = LabelEncoder()
+        y_train = lbl_encoder.fit_transform(y_train)
 
     if task == "classification":
-        X_train, y_train = handle_imbalance(new_df, target_column = target, X_train = X_scaled, y_train = y_train )
+        X_train, y_train = handle_imbalance(df, target_column = target_column, X_train = X_scaled, y_train = y_train )
 
     best_models = train_model(task = task, X_train = X_train, y_train = y_train, logger = logger)
 
-    return best_models
+    return best_models, std_scaler, removed_columns, ohe_lst, vectorizer_lst
+
 
 
 
