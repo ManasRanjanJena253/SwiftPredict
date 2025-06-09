@@ -1,19 +1,31 @@
 # Importing dependencies
 from fastapi import FastAPI
 from pymongo import MongoClient
-import uuid
 from datetime import datetime
 import matplotlib.pyplot as plt
 from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from io import BytesIO
 import uvicorn
-from motor.motor_asyncio import AsyncIOMotorClient
 
 app = FastAPI()
 client = MongoClient(host = "localhost", port = 27017)
+origins = ["http://localhost:3000"]  # matching the React dev port
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins = origins,
+    allow_credentials = True,
+    allow_methods = ["*"],
+    allow_headers = ["*"],
+)
+
 db = client["SwiftPredict"]
 run = db["Run"]
 
+@app.get("/")
+def welcome():
+    return {"Welcome": "SwiftPredict: Your compass from data to discovery."}
 @app.post("/{project_name}/runs/{run_id}/log_param")
 def log_param(key: str, value, run_id: str, project_name: str):
     """
@@ -83,7 +95,7 @@ def update_status(run_id: str, project_name: str, status: str):
     data = run.find_one({"run_id": run_id, "project_name": project_name})
     if data:
         run.update_one({"run_id": run_id, "project_name": project_name},
-                             {"status": status})
+                             {"$set": {"status": status.lower()}})
         return run.find_one({"run_id": run_id, "project_name": project_name}, {"_id": 0})
     else:
         return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"}
@@ -105,6 +117,18 @@ def add_notes(run_id: str, project_name: str, notes: str):
     else:
         return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"}
 
+@app.get("/projects/{status}")
+def get_projects_from_status(status: str):
+    """
+    Used to get all the projects which are marked as completed.
+    :return:
+    """
+    data = run.find({"status": status.lower()}, {"_id": 0}).to_list()
+    if data:
+        return {"data":data}
+
+    else:
+        return {"message": f"No {status} projects found"}
 
 @app.get("/{project_name}/runs/{run_id}")
 def fetch_run_id(run_id: str, project_name: str):

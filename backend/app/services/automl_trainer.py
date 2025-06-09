@@ -66,9 +66,9 @@ class AutoML:
             for k in self.removed_columns:
                 features.pop(k)
 
-        scaled_features = self.std_scaler.transform([features])
+        processed_features = self.std_scaler.transform([features])
 
-        return scaled_features
+        return processed_features
 
     def evaluation_performance(self, model = None, key: str = None):
         """
@@ -77,7 +77,7 @@ class AutoML:
         :param key: The metric whose best model you want to test on test data.
         :return: The value of various metrics for
         """
-        def eval_params(model):
+        def eval_params(model_instance):
             metrics_dict = {}
             y_pred = model.predict(self.X_test)
             if self.task == "classification":
@@ -93,11 +93,11 @@ class AutoML:
                 metrics_dict["R2"] = r2_score(self.y_test, y_pred)
                 return metrics_dict
         if model:
-            return eval_params(model = model)
+            return eval_params(model_instance = model)
 
         elif key:
             model = self.best_models[key]
-            return eval_params(model = model)
+            return eval_params(model_instance = model)
 
         else:
             return "Error !! Plz provide with either key or model."
@@ -109,23 +109,8 @@ class AutoML:
         :param features: A 2D list of the features.
         :return: The predicted label/value.
         """
-        print(self.ohe_lst)
-        print(len(features))
-        if self.ohe_lst:
-            for k, ohe in self.ohe_lst:
-                features[k] = ohe.transform([features[k]])
-
-        if self.vectorizer_lst:
-            for k, vectorizer in self.vectorizer_lst:
-                features[k] = vectorizer.transform([features[k]])
-
-        if self.removed_columns:
-            for k in self.removed_columns:
-                features.pop(k)
-
-        scaled_features = self.std_scaler.transform([features])
-
-        return model.predict(scaled_features)
+        processes_features = self._preprocessing(features = features)
+        return model.predict(processes_features)
 
 
 

@@ -6,7 +6,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
-        'fastapi', 'uvicorn', 'pymongo', 'click', 'scikit-learn', 'matplotlib', 'seaborn', 'pandas', 'numpy'
+        'fastapi', 'uvicorn', 'pymongo', 'click', 'scikit-learn', 'matplotlib', 'seaborn', 'pandas', 'numpy', 'streamlit', 'requests'
     ],
     entry_points={
         'console_scripts': [

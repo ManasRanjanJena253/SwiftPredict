@@ -1,9 +1,9 @@
 # Importing dependencies
 from fastapi import FastAPI
 from app.services.automl_trainer import AutoML
+from app.services.preprocessing import training_pipeline
 
 app = FastAPI()
-model_trainer = AutoML(project_name=project_name, file_path=file)
 
 @app.post("/automl/train")
 def train_model(file, project_name: str, target_column: str):
@@ -14,7 +14,7 @@ def train_model(file, project_name: str, target_column: str):
     :param target_column: The name of the target column.
     :return: The best models and parameters after training.
     """
-    best_models = model_trainer.fit()
+    best_models, _, _, _, _, _, _ = training_pipeline(file, project_name = project_name, target_column = target_column)
     return best_models
 
 @app.get("/automl/predict")

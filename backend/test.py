@@ -6,8 +6,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.datasets import make_classification
 from sklearn.model_selection import cross_val_score
 import pandas as pd
-import asyncio
-import nest_asyncio
 from io import BytesIO
 from PIL import Image
 
