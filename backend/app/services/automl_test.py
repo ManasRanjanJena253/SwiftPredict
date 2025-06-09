@@ -1,6 +1,5 @@
 # Importing dependencies
 import pickle
-
 from automl_trainer import AutoML
 
 model_trainer = AutoML(project_name = "Testing the automl", file_path = "tested.csv")

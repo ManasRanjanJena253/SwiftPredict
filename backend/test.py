@@ -16,15 +16,15 @@ model = LogisticRegression(max_iter = 500, penalty = 'l2', random_state = 21)
 
 scores = cross_val_score(estimator = model, X = X, y = y, cv = 10, scoring = "accuracy")
 
-async def main():
+def main():
     if "logger" not in st.session_state:
         st.session_state.logger = SwiftPredict(project_name = "Testing Classification Model")
     logger = st.session_state.logger
-    await logger.log_params({"model": "LogisticRegression", "penalty": "l2", "max_iter": 500})
+    logger.log_params({"model": "LogisticRegression", "penalty": "l2", "max_iter": 500})
     for step, value in enumerate(scores):
-        await logger.log_metric(step = step, value = value, key = "accuracy")
+        logger.log_metric(step = step, value = value, key = "accuracy")
 
-asyncio.run(main())
+main()
 base_url = "http://127.0.0.1:9000"
 
 st.markdown(
@@ -60,10 +60,12 @@ elif get_projects:
 elif visualize_run:
     project_name = st.text_input("Enter the project name")
     param = {"metric": "accuracy"}
-    response = requests.get(base_url + f"/{project_name}/plots", params = param)
+    show = st.button("Show")
+    if show:
+        response = requests.get(base_url + f"/{project_name}/plots", params = param)
 
-    img = Image.open(BytesIO(response.content))
-    st.image(img)
+        img = Image.open(BytesIO(response.content))
+        st.image(img)
 
 elif add_notes:
     project_name = st.text_input("Enter the project name")

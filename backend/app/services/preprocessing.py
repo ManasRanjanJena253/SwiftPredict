@@ -155,7 +155,9 @@ def train_model(task, X_train, y_train, logger):
             roc = cv["test_roc_auc"]
             precision = cv["test_precision"]
             trained_models[str(k)] = model.fit(X_train, y_train)
-            logger.log_params(model.get_params())
+            logger.log_param(key = "model", value = str(k))
+            for key, value in model.get_params():
+                logger.log_param(key = key, value = value)
 
             for step in range(len(acc)):
                 logger.log_metric(step = step, value = acc[step], key = "accuracy")
@@ -266,7 +268,6 @@ def handle_cat_columns(df, cat_columns):
                 new_df = pd.concat([new_df, transformed_df], axis = 1)
 
             else:
-                # TF-IDF vectorize entire column at once
                 vectorizer = TfidfVectorizer()
                 tfidf_array = vectorizer.fit_transform(new_df[k].astype(str)).toarray()
                 tfidf_df = pd.DataFrame(tfidf_array, columns=[f"{k}_tfidf_{i}" for i in range(tfidf_array.shape[1])],
@@ -287,20 +288,18 @@ def training_pipeline(df, target_column: str, project_name: str):
     :return: Scaled and Training ready features.
     """
     logger = SwiftPredict(project_name = project_name)
-    new_df = df.drop([target_column], axis = 1)
+    new_df = df
     target = df[target_column]
     columns = get_dtype_columns(new_df)
     cat_columns = columns["categorical"]
     print(cat_columns)  # For debugging
     num_columns = columns["numeric"]
     print(num_columns) # For debugging
-    cat_columns_index = []
     ohe_lst = []
-    ohe_dict = {}
     vectorizer_lst = []
 
     # Getting the task type
-    task = detect_task(df, y = target_column)
+    task = detect_task(new_df, y = target_column)
 
     # Handling null values
     new_df = handle_null_values(new_df)
@@ -314,7 +313,7 @@ def training_pipeline(df, target_column: str, project_name: str):
         new_df, ohe_lst, vectorizer_lst = handle_cat_columns(df = new_df, cat_columns = cat_columns)
 
     # Removing unnecessary columns
-    corr = new_df.corr()
+    corr = new_df[num_columns].corr()
     direct_corr = [col for col in corr.columns if corr[col].abs().max() == 1]   # Getting the columns having correlation 1
     useful_col_len = len(direct_corr)//2
     removed_columns = []
@@ -323,13 +322,14 @@ def training_pipeline(df, target_column: str, project_name: str):
         new_df.drop([direct_corr.pop()], inplace = True, axis = 1)
 
     # Splitting the data
-    X = new_df
+    X = new_df.drop([target_column], axis = 1)
     y = target
     X_train, X_test, y_train, y_test = train_test_split(X, y, stratify = y, random_state = 21)
 
     # Scaling numerical data
     std_scaler = StandardScaler()
     X_scaled= std_scaler.fit_transform(X_train)
+    X_test = std_scaler.transform(X_test)
 
     # Handling categorical labels
     if y_train.dtype == "string":
@@ -341,7 +341,7 @@ def training_pipeline(df, target_column: str, project_name: str):
 
     best_models = train_model(task = task, X_train = X_train, y_train = y_train, logger = logger)
 
-    return best_models, std_scaler, removed_columns, ohe_lst, vectorizer_lst
+    return best_models, std_scaler, removed_columns, ohe_lst, vectorizer_lst, X_test, y_test
 
 
 

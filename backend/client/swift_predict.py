@@ -26,7 +26,7 @@ class SwiftPredict :
             self.run.insert_one(param)
 
     def log_metric(self, step, key: str, value):
-        check = self.run.find_one({"run_id": self.run_id})
+        check = self.run.find_one({"run_id": self.run_id, "metrics.metric": key.lower(), "project_name": self.project_name})
         if check :
             self.run.update_one({"run_id": self.run_id, "project_name": self.project_name},
                                       {"$set": {"metrics.metric": key.lower()},
