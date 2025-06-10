@@ -156,7 +156,19 @@ def get_all_projects():
     else:
         return {"Error": "No, Projects made/saved yet."}
 
-@app.get("/{project_name}/plots")
+@app.get("/{project_name}/plots/available_metrics")
+def get_available_metrics(project_name: str):
+    """
+    Used to get all the metrics which are available for a particular project.
+    :param project_name:
+    :return: list of all metrics.
+    """
+    metrics = run.find({"project_name": project_name}, {"metrics.metric": 1, "_id": 0, "run_id": 1}).to_list()
+    # uniq_metrics = list(set(metrics))    # Getting only the unique metrics.
+
+    return {"all_available_metrics": metrics}
+
+@app.get("/{project_name}/plots/{metric}")
 def plot_metrics(metric: str, run_id: str, project_name: str):
     """
     This function takes in the metric name and a list containing dicts containing each iteration(step) and metric value at that instance.
@@ -175,7 +187,7 @@ def plot_metrics(metric: str, run_id: str, project_name: str):
         plt.plot(steps, iter_values)
         plt.xlabel("Step")
         plt.ylabel(metric.title())
-        plt.title(f"{metric.title()} Over Time")
+        plt.title(f"{metric.title()} plot of Run_id : {run_id}")
 
         # fig = plt.gcf()
         # return fig, This statement will raise an error as fig is a python object and not a web serializable response, So we need to stream this in the form of binary streams.
@@ -189,5 +201,32 @@ def plot_metrics(metric: str, run_id: str, project_name: str):
     else:
         return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST OR The metrics field DOESN'T EXIST."}
 
-if __name__ == '__main__':   # Code to run the code without using the command prompt.
+@app.delete("/projects/delete")
+def delete_projects(project_name: str, run_id: str = None):
+    """
+    Used to delete an all projects with a particular name or projects with a certain run_id
+    :param project_name: The name of the project.
+    :param run_id: The unique id given to a run.
+    :return: Confirmation  json message.
+    """
+    if run_id:
+        data = run.delete_many({"run_id": run_id, "project_name": project_name})
+        return {"deleted": f"{data.deleted_count} files have been deleted."}
+
+    else:
+        data = run.delete_many({"project_name": project_name})
+        return {"deleted": f"{data.deleted_count} files have been deleted."}
+
+@app.delete("/delete_all")
+def delete_all():
+    """
+    Used to delete all the records of all the projects.
+    """
+    db.drop_collection("Run")
+    if db.list_collections().to_list():
+        return {"error": "Deletion Failed"}
+    else:
+        return {"message": "The data deleted successfully."}
+
+if __name__ == '__main__':
     uvicorn.run(app, host = '127.0.0.1', port = 9000)
