@@ -1,4 +1,3 @@
-# Importing dependencies
 import pandas as pd
 from preprocessing import training_pipeline, detect_task
 from sklearn.metrics import accuracy_score, f1_score, precision_score, roc_auc_score, mean_squared_error, mean_absolute_error, r2_score
@@ -7,13 +6,28 @@ from typing import Any
 
 class AutoML:
     """
-    An AutoML class that can be used to Train, ML models on any dataset without going through the usual model training cycle of preprocessing and comparing hundreds
-    of models.
+    AutoML is a lightweight wrapper class designed to automate data preprocessing,
+    model training, evaluation, and export for both classification and regression tasks.
+
+    Attributes:
+        project_name (str): Name of the current project or experiment.
+        file_path (str): Path to the dataset CSV file.
+        data (pd.DataFrame): Loaded dataset used for training.
+        best_models (dict): Dictionary containing best models for various metrics and an 'overall' best.
+        std_scaler (StandardScaler): Scaler object for standardizing numerical features.
+        removed_columns (list): List of columns removed during preprocessing.
+        ohe_lst (list): List of tuples (column, encoder) for one-hot encoded categorical columns.
+        vectorizer_lst (list): List of tuples (column, vectorizer) for text features.
+        X_test (pd.DataFrame): Test features reserved for evaluation.
+        y_test (pd.Series): Test target labels corresponding to X_test.
+        target_column (str): Name of the target column in the dataset.
+        task (str): Type of ML task, either 'classification' or 'regression'.
     """
-    def __init__(self, project_name: str, file_path, target_column: str):
-        self.project_name = project_name
-        self.file_path = file_path
-        self.data = pd.read_csv(self.file_path)
+
+    def __init__(self):
+        self.project_name = ''
+        self.file_path = ''
+        self.data = None
         self.best_models = {}
         self.std_scaler = None
         self.removed_columns = []
@@ -21,38 +35,58 @@ class AutoML:
         self.vectorizer_lst = []
         self.X_test = Any
         self.y_test = Any
+        self.target_column = ''
+        self.task = None
+
+    def fit(self, project_name: str, file_path: str, target_column: str) -> dict:
+        """
+        Trains models on the provided dataset using the AutoML pipeline.
+
+        Args:
+            project_name (str): Name of the project to associate with this run.
+            file_path (str): Path to the input CSV file.
+            target_column (str): Column name to be predicted (label column).
+
+        Returns:
+            dict: Dictionary containing the best model names (string) for each metric and the overall best model.
+        """
+        self.project_name = project_name
+        self.file_path = file_path
         self.target_column = target_column
-        self.task = detect_task(df = self.data, y = self.target_column)
+        self.data = pd.read_csv(self.file_path)
+        self.task = detect_task(df=self.data, y=self.target_column)
 
-    def fit(self):
-        """
-        Used for fitting the model to the data for training the models.
-        :return: The best model for each evaluation metric and the overall best model in the form of dict.
-        """
-        self.best_models, self.std_scaler, self.removed_columns, self.ohe_lst, self.vectorizer_lst, self.X_test, self.y_test = training_pipeline(
-            self.data, target_column = self.target_column,project_name = self.project_name
+        self.best_models, self.std_scaler, self.removed_columns, self.ohe_lst, \
+        self.vectorizer_lst, self.X_test, self.y_test, best_model_showcase = training_pipeline(
+            self.data, target_column=self.target_column, project_name=self.project_name
         )
-        return self.best_models
+        return best_model_showcase
 
-    def export_model(self, model_path: str, key: str = None):
+    def export_model(self, model_path: str, key: str = None) -> None:
         """
-        Used to export/download the desired trained model. By default, downloads the overall best model.
-        :param model_path: The path of the file where you want to save the model.
-        :param key: The parameter name of which best model you want to download.
-        :return: None.
-        """
-        if not key:
-            with open(model_path, 'wb') as f:
-                pickle.dump(self.best_models["overall"], f)
-        else:
-            with open(model_path, 'wb') as f:
-                pickle.dump(self.best_models[key], f)
+        Exports the best trained model to a file using pickle.
 
-    def _preprocessing(self, features):
+        Args:
+            model_path (str): The file path to save the serialized model.
+            key (str, optional): The metric key for selecting a specific best model.
+                                 If None, the overall best model is saved.
+
+        Returns:
+            None
         """
-        The preprocessing pipeline for the raw data, that the model haven't seen before.
-        :param features:
-        :return:
+        model_to_export = self.best_models["overall"][0] if not key else self.best_models[key]
+        with open(model_path, 'wb') as f:
+            pickle.dump(model_to_export, f)
+
+    def _preprocessing(self, features: dict) -> Any:
+        """
+        Preprocesses raw input features before prediction, based on the pipeline fitted during training.
+
+        Args:
+            features (dict): Dictionary containing raw input features.
+
+        Returns:
+            np.ndarray: Preprocessed and scaled feature array ready for prediction.
         """
         if self.ohe_lst:
             for k, ohe in self.ohe_lst:
@@ -64,53 +98,58 @@ class AutoML:
 
         if self.removed_columns:
             for k in self.removed_columns:
-                features.pop(k)
+                features.pop(k, None)
 
         processed_features = self.std_scaler.transform([features])
-
         return processed_features
 
-    def evaluation_performance(self, model = None, key: str = None):
+    def evaluate_performance(self, model = None, key: str = None) -> dict:
         """
-        Used to get the performance of the provided model or key on the test_data which is created while training.
-        :param model: The exported model.
-        :param key: The metric whose best model you want to test on test data.
-        :return: The value of various metrics for
+        Evaluates model performance using stored test data.
+
+        Args:
+            model (Any, optional): A trained model instance to evaluate.
+            key (str, optional): If model is None, key to select from best_models.
+
+        Returns:
+            dict: A dictionary of evaluation metrics.
+
+        Raises:
+            ValueError: If neither model nor key is provided.
         """
         def eval_params(model_instance):
-            metrics_dict = {}
-            y_pred = model.predict(self.X_test)
+            y_pred = model_instance.predict(self.X_test)
             if self.task == "classification":
-                metrics_dict["accuracy"] = accuracy_score(self.y_test, y_pred)
-                metrics_dict["f1"] = f1_score(self.y_test, y_pred)
-                metrics_dict["roc_auc"] = roc_auc_score(self.y_test, y_pred)
-                metrics_dict["precision"] = precision_score(self.y_test, y_pred)
-                return metrics_dict
-
+                return {
+                    "accuracy": accuracy_score(self.y_test, y_pred),
+                    "f1": f1_score(self.y_test, y_pred),
+                    "roc_auc": roc_auc_score(self.y_test, y_pred),
+                    "precision": precision_score(self.y_test, y_pred)
+                }
             else:
-                metrics_dict["MSE"] = mean_squared_error(self.y_test, y_pred)
-                metrics_dict["MAE"] = mean_absolute_error(self.y_test, y_pred)
-                metrics_dict["R2"] = r2_score(self.y_test, y_pred)
-                return metrics_dict
+                return {
+                    "MSE": mean_squared_error(self.y_test, y_pred),
+                    "MAE": mean_absolute_error(self.y_test, y_pred),
+                    "R2": r2_score(self.y_test, y_pred)
+                }
+
         if model:
             return eval_params(model_instance = model)
-
         elif key:
-            model = self.best_models[key]
-            return eval_params(model_instance = model)
-
+            return eval_params(model_instance = self.best_models[key])
         else:
-            return "Error !! Plz provide with either key or model."
+            raise ValueError("Either a model or key must be provided.")
 
-    def predict(self, model, features: list):
+    def predict(self, model, features: dict) -> Any:
         """
-        Used for get the prediction of model on the data provided.
-        :param model: The exported model.
-        :param features: A 2D list of the features.
-        :return: The predicted label/value.
+        Predicts target values using the trained model on new data.
+
+        Args:
+            model (Any): Trained model instance (e.g., XGBClassifier).
+            features (dict): Raw feature inputs as a dictionary.
+
+        Returns:
+            np.ndarray: Model predictions.
         """
-        processes_features = self._preprocessing(features = features)
-        return model.predict(processes_features)
-
-
-
+        processed_features = self._preprocessing(features = features)
+        return model.predict(processed_features)

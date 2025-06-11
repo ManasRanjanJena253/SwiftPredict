@@ -25,16 +25,27 @@ run = db["Run"]
 
 @app.get("/")
 def welcome():
+    """
+    Root endpoint for API.
+
+    Returns:
+        dict: Welcome message for the SwiftPredict platform.
+    """
     return {"Welcome": "SwiftPredict: Your compass from data to discovery."}
+
 @app.post("/{project_name}/runs/{run_id}/log_param")
 def log_param(key: str, value, run_id: str, project_name: str):
     """
-    Used to log the parameters used when training a certain model.
-    :param key: The name of the parameter.
-    :param value: The value given/assigned to that parameter.
-    :param run_id: The unique run_id of that particular model.
-    :param project_name: The name of the project.
-    :return: The updated data.
+    Logs a single parameter for a specific run of a project.
+
+    Args:
+        key (str): Name of the parameter.
+        value (Any): Value of the parameter.
+        run_id (str): Unique identifier of the run.
+        project_name (str): Name of the project.
+
+    Returns:
+        dict: Updated run data or error message.
     """
     data = run.find_one({"run_id": run_id, "project_name": project_name})
     if data:
@@ -47,13 +58,17 @@ def log_param(key: str, value, run_id: str, project_name: str):
 @app.post("/{project_name}/runs/{run_id}/log_metric")
 def log_metric(key: str, value, step: int, run_id: str, project_name: str):
     """
-    Used to log the metrics used for evaluation of the model.
-    :param key: The name of the metric
-    :param value: The value of the metric calculated.
-    :param run_id: The unique run_id of that particular parameter.
-    :param step: The iteration at which the value of the metrics is being given.
-    :param project_name: The name of the project.
-    :return: The updated data.
+    Logs a metric value at a given step for a specific run.
+
+    Args:
+        key (str): Metric name (e.g., accuracy, loss).
+        value (float): Metric value.
+        step (int): Training step or epoch.
+        run_id (str): Unique identifier of the run.
+        project_name (str): Name of the project.
+
+    Returns:
+        dict: Updated run data or error message.
     """
     data = run.find_one({"run_id": run_id, "project_name": project_name})
     if data:
@@ -69,11 +84,15 @@ def log_metric(key: str, value, step: int, run_id: str, project_name: str):
 @app.post("/{project_name}/runs/{run_id}/add_tags")
 def add_tags(run_id: str, project_name: str, tags: list):
     """
-    Used to add tags to already created runs.
-    :param run_id: The unique run_id associated with a run.
-    :param project_name: The name of the project.
-    :param tags: List of tags you want to provide to a particular run.
-    :return: The updated data.
+    Adds tags to an existing run.
+
+    Args:
+        run_id (str): Unique identifier of the run.
+        project_name (str): Name of the project.
+        tags (list): List of tags to add.
+
+    Returns:
+        dict: Updated run data or error message.
     """
     data = run.find_one({"run_id": run_id, "project_name": project_name})
     if data:
@@ -86,11 +105,15 @@ def add_tags(run_id: str, project_name: str, tags: list):
 @app.post("/{project_name}/runs/{run_id}/update_status")
 def update_status(run_id: str, project_name: str, status: str):
     """
-    Used to add tags to already created runs.
-    :param run_id: The unique run_id associated with a run.
-    :param project_name: The name of the project.
-    :param status: The current running status of the project.
-    :return: The updated data.
+    Updates the status of a specific run.
+
+    Args:
+        run_id (str): Unique identifier of the run.
+        project_name (str): Name of the project.
+        status (str): New status (e.g., 'completed', 'failed').
+
+    Returns:
+        dict: Updated run data or error message.
     """
     data = run.find_one({"run_id": run_id, "project_name": project_name})
     if data:
@@ -103,11 +126,15 @@ def update_status(run_id: str, project_name: str, status: str):
 @app.post("/{project_name}/runs/{run_id}/add_notes")
 def add_notes(run_id: str, project_name: str, notes: str):
     """
-    Used to add tags to already created runs.
-    :param run_id: The unique run_id associated with a run.
-    :param project_name: The name of the project.
-    :param notes: For experiment description/logging.
-    :return: The updated data.
+    Adds descriptive notes to a specific run.
+
+    Args:
+        run_id (str): Unique identifier of the run.
+        project_name (str): Name of the project.
+        notes (str): Notes or description about the run.
+
+    Returns:
+        dict: Updated run data or error message.
     """
     data = run.find_one({"run_id": run_id, "project_name": project_name})
     if data:
@@ -120,8 +147,13 @@ def add_notes(run_id: str, project_name: str, notes: str):
 @app.get("/projects/{status}")
 def get_projects_from_status(status: str):
     """
-    Used to get all the projects which are marked as completed.
-    :return:
+    Retrieves all projects with the given status.
+
+    Args:
+        status (str): Run status to filter by (e.g., 'completed').
+
+    Returns:
+        dict: List of projects with the specified status or a message.
     """
     data = run.find({"status": status.lower()}, {"_id": 0}).to_list()
     if data:
@@ -133,10 +165,14 @@ def get_projects_from_status(status: str):
 @app.get("/{project_name}/runs/{run_id}")
 def fetch_run_id(run_id: str, project_name: str):
     """
-    Used to fetch all the data associated with a specific run_id .
-    :param run_id: The unique run_id of a particular code run.
-    :param project_name: The name of the project.
-    :return: The updated data.
+    Retrieves all details associated with a specific run ID.
+
+    Args:
+        run_id (str): Unique identifier of the run.
+        project_name (str): Name of the project.
+
+    Returns:
+        dict: Run details or error message.
     """
     docs = run.find_one({"run_id": run_id, "project_name": project_name}, {"_id": 0})
     if docs:
@@ -147,8 +183,10 @@ def fetch_run_id(run_id: str, project_name: str):
 @app.get("/projects")
 def get_all_projects():
     """
-    Used to get all distinct projects you have created.
-    :return: List of projects.
+    Retrieves a list of all distinct project names.
+
+    Returns:
+        list or dict: List of project names or an error message.
     """
     projects = run.distinct("project_name")
     if projects:
@@ -159,9 +197,13 @@ def get_all_projects():
 @app.get("/{project_name}/plots/available_metrics")
 def get_available_metrics(project_name: str):
     """
-    Used to get all the metrics which are available for a particular project.
-    :param project_name:
-    :return: list of all metrics.
+    Lists all available metrics logged for a given project.
+
+    Args:
+        project_name (str): Name of the project.
+
+    Returns:
+        dict: List of available metrics per run.
     """
     metrics = run.find({"project_name": project_name}, {"metrics.metric": 1, "_id": 0, "run_id": 1}).to_list()
     # uniq_metrics = list(set(metrics))    # Getting only the unique metrics.
@@ -171,12 +213,17 @@ def get_available_metrics(project_name: str):
 @app.get("/{project_name}/plots/{metric}")
 def plot_metrics(metric: str, run_id: str, project_name: str):
     """
-    This function takes in the metric name and a list containing dicts containing each iteration(step) and metric value at that instance.
-    :param metric: Name of the metric.
-    :param run_id: The unique run_id of a particular code run.
-    :param project_name: The name of the project.
-    :return: Streaming Image.
+    Generates and returns a plot image for a specific metric of a run.
+
+    Args:
+        metric (str): Name of the metric (e.g., 'loss').
+        run_id (str): Unique identifier of the run.
+        project_name (str): Name of the project.
+
+    Returns:
+        StreamingResponse or dict: PNG image stream of the plot or error message.
     """
+
     data = run.find_one({"run_id": run_id, "project_name": project_name, "metrics.metric": metric.lower()})
     if data:
         values = data["metrics"]["details"]
@@ -204,10 +251,14 @@ def plot_metrics(metric: str, run_id: str, project_name: str):
 @app.delete("/projects/delete")
 def delete_projects(project_name: str, run_id: str = None):
     """
-    Used to delete an all projects with a particular name or projects with a certain run_id
-    :param project_name: The name of the project.
-    :param run_id: The unique id given to a run.
-    :return: Confirmation  json message.
+    Deletes a specific run or all runs under a project.
+
+    Args:
+        project_name (str): Name of the project.
+        run_id (str, optional): Specific run ID to delete.
+
+    Returns:
+        dict: Confirmation message of deleted entries.
     """
     if run_id:
         data = run.delete_many({"run_id": run_id, "project_name": project_name})
@@ -220,7 +271,10 @@ def delete_projects(project_name: str, run_id: str = None):
 @app.delete("/delete_all")
 def delete_all():
     """
-    Used to delete all the records of all the projects.
+    Deletes all run data from the database.
+
+    Returns:
+        dict: Message indicating whether deletion was successful.
     """
     db.drop_collection("Run")
     if db.list_collections().to_list():
@@ -229,4 +283,4 @@ def delete_all():
         return {"message": "The data deleted successfully."}
 
 if __name__ == '__main__':
-    uvicorn.run(app, host = '127.0.0.1', port = 9000)
+    uvicorn.run(app, host = '127.0.0.1', port = 8000)

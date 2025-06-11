@@ -1,5 +1,4 @@
 # Importing dependencies
-from pandas.core.interchange.dataframe_protocol import DataFrame
 from sklearn.preprocessing import StandardScaler, LabelEncoder, OneHotEncoder
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import GaussianNB
@@ -13,13 +12,22 @@ from client.swift_predict import SwiftPredict
 from statistics import multimode
 import pandas as pd
 import numpy as np
+from scipy.stats import normaltest
+from tqdm.auto import tqdm
+import warnings
+warnings.filterwarnings("ignore")
 
 
 def get_dtype_columns(df):
     """
-    Gives all the columns segregated on the basis of their dtypes.
-    :param df: The pandas dataframe of the dataset.
-    :return: A dictionary containing the dtype as key and the list of columns of that dtype as values.
+    Segregates columns in the DataFrame based on their data types.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame.
+
+    Returns:
+        dict: Dictionary with keys 'categorical', 'numeric', 'date', and 'bool',
+              each mapping to a list of column names of that type.
     """
     cat_columns = df.select_dtypes(include = ["object"]).columns.tolist()
     num_columns = df.select_dtypes(include = ["number"]).columns.tolist()
@@ -30,10 +38,15 @@ def get_dtype_columns(df):
 
 def handle_null_values(df):
     """
-    Handles the null values in a dataset.
-    :param df: The dataset in the format of pandas dataframe.
-    :return: A pandas dataframe after all null value issues have been resolved.
-    """
+     Handles missing values in the DataFrame using intelligent strategies.
+
+     Args:
+         df (pd.DataFrame): The input DataFrame with potential null values.
+
+     Returns:
+         pd.DataFrame: The cleaned DataFrame with nulls handled via dropping,
+                       filling with mean/mode, or interpolation.
+     """
     total_null_rows = df.isnull().any(axis = 1).sum()   # Will give the total no. of rows having null values.
     total_rows = df.any(axis = 1).sum()   # Gives the total no. of rows in the data.
 
@@ -55,7 +68,12 @@ def handle_null_values(df):
                     df[k] = df[k].fillna(value = df[k].mode())
 
                 elif k in num_columns:
-                    df[k] = df[k].fillna(value = df[k].mean())
+                    stats, p_value = normaltest(df[k])    # Checking if the data is normally distributed or not.
+                    if p_value > 0.05:
+                        df[k] = df[k].fillna(value = df[k].mean())
+
+                    else:
+                        df[k] = df[k].fillna(value = df[k].mode())
 
                 else :
                     df[k] = df[k].interpolate(method = "time")
@@ -66,11 +84,14 @@ def handle_null_values(df):
 
 def detect_task(df, y: str):
     """
-    Takes in the dataset df and the target label and finds what kind of task is to be performed on the dataset.
-    i.e. Classification or Regression
-    :param df: The pandas dataframe of the dataset.
-    :param y: The target label.
-    :return: The type task to be done. Either "classification" or "regression"
+    Detects whether the ML task is classification or regression based on target column.
+
+    Args:
+        df (pd.DataFrame): The dataset.
+        y (str): The target column name.
+
+    Returns:
+        str: 'classification' or 'regression' depending on target data type and distribution.
     """
     df = df
     target = df[y]
@@ -89,12 +110,16 @@ def detect_task(df, y: str):
 
 def handle_imbalance(df, target_column : str, X_train, y_train):
     """
-    Used to fisx imbalanced dataset.
-    :param df: The pandas dataframe of the dataset
-    :param target_column: The name of the target column
-    :param X_train: The training features after train_test_split
-    :param y_train: The target features after train test split.
-    :return: X_res and y_res.
+    Applies SMOTE to fix class imbalance in training data if necessary.
+
+    Args:
+        df (pd.DataFrame): The original DataFrame.
+        target_column (str): Name of the target column.
+        X_train (np.ndarray): Training features.
+        y_train (np.ndarray or pd.Series): Training labels.
+
+    Returns:
+        tuple: Resampled X_train and y_train after applying SMOTE (if needed).
     """
     target = df[target_column]
     class_counts = target.value_counts().tolist()
@@ -112,10 +137,14 @@ def handle_imbalance(df, target_column : str, X_train, y_train):
 
 def model_zoo(task, model = None):
     """
-    Gives the models required for a specific task.
-    :param task: The task to be performed on the dataset.
-    :param model: Any optional model if required specifically. OPTIONAL.
-    :return: List of models.
+    Returns a list of models applicable to the specified ML task.
+
+    Args:
+        task (str): The type of ML task ('classification' or 'regression').
+        model (object, optional): A specific model to include in the list.
+
+    Returns:
+        list: List of model classes corresponding to the task.
     """
     if task == "classification":
         models = [GaussianNB, XGBClassifier, RandomForestClassifier, LGBMClassifier, LogisticRegression]
@@ -132,12 +161,18 @@ def model_zoo(task, model = None):
 
 def train_model(task, X_train, y_train, logger):
     """
-    Used to train the models and log the model results.
-    :param task: The type of task to be performed on the dataset.
-    :param X_train: The training features.
-    :param y_train: The training labels.
-    :param logger: The class used for logging the data.
-    :return: Best Model
+    Trains multiple models and logs metrics using cross-validation.
+
+    Args:
+        task (str): The ML task ('classification' or 'regression').
+        X_train (np.ndarray): Training features.
+        y_train (np.ndarray or pd.Series): Training labels.
+        logger (SwiftPredict): Logger object for metric and parameter logging.
+
+    Returns:
+        tuple:
+            - dict: Best models based on individual metrics and overall ranking.
+            - dict: Model names for each best-performing metric.
     """
     if task == "classification":
         avg_acc_scores = []
@@ -147,8 +182,11 @@ def train_model(task, X_train, y_train, logger):
         models = model_zoo(task = task)
         trained_models = {}
         scoring_methods = ["accuracy", "f1", "roc_auc", "precision"]
-        for k in models:   # Training each classification model in model zoo.
-            model = k()
+        for k in tqdm(models):     # Training each classification model in model zoo.
+            if k.__name__ == "LGBMClassifier":
+                model = k(verbose = -1)
+            else :
+                model = k()
             cv = cross_validate(estimator = model, X = X_train, y = y_train, cv = 10, scoring = scoring_methods)
             acc = cv["test_accuracy"]
             f1 = cv["test_f1"]
@@ -156,7 +194,7 @@ def train_model(task, X_train, y_train, logger):
             precision = cv["test_precision"]
             trained_models[str(k)] = model.fit(X_train, y_train)
             logger.log_param(key = "model", value = str(k))
-            for key, value in model.get_params():
+            for key, value in model.get_params().items():
                 logger.log_param(key = key, value = value)
 
             for step in range(len(acc)):
@@ -193,7 +231,12 @@ def train_model(task, X_train, y_train, logger):
                                                       )],
                        "overall": [trained_models[str(models[i])] for i in overall_best]}
 
-        return best_models
+        best_model_showcase = {}
+
+        for metric, model in best_models.items():
+            best_model_showcase[metric] = str(type(model).__name__) if str(type(model).__name__) != 'list' else [str(type(k).__name__) for k in model ]
+
+        return best_models, best_model_showcase
 
     else:
         avg_neg_mse = []
@@ -203,9 +246,9 @@ def train_model(task, X_train, y_train, logger):
 
         models = model_zoo(task = task)
         scoring_methods = ["neg_mean_squared_error", "neg_mean_absolute_error", "r2"]
-        for k in models:  # Training each classification model in model zoo.
+        for k in tqdm(models):  # Training each classification model in model zoo.
             model = k()
-            cv = cross_validate(estimator = model, X = X_train, y = y_train, cv = 10, scoring = scoring_methods)
+            cv = cross_validate(estimator = model, X = X_train, y = y_train, cv = 5, scoring = scoring_methods)
             neg_mse = cv["test_neg_mean_squared_error"]
             neg_mae = cv["test_neg_mean_absolute_error"]
             r2 = cv["test_r2"]
@@ -240,14 +283,25 @@ def train_model(task, X_train, y_train, logger):
                                                 )],
                        "overall": [trained_models[str(models[i])] for i in overall_best]}
 
-        return best_models
+        best_model_showcase = {}
+        for metric, model in best_models.items():
+            best_model_showcase[metric] = str(type(model).__name__) if str(type(model).__name__) != 'list' else [str(type(k).__name__) for k in model ]
+
+        return best_models, best_model_showcase
 
 def handle_cat_columns(df, cat_columns):
     """
-    Used for preprocessing of categorical columns in a dataset.
-    :param df: The pandas dataframe of the dataset.
-    :param cat_columns: The list of categorical column names.
-    :return: updated df and index of fixed columns.
+    Encodes categorical columns using OneHotEncoding or TF-IDF based on cardinality.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame.
+        cat_columns (list): List of categorical column names.
+
+    Returns:
+        tuple:
+            - pd.DataFrame: Updated DataFrame with encoded categorical columns.
+            - list: List of tuples (column index, fitted OneHotEncoder).
+            - list: List of tuples (column index, fitted TfidfVectorizer).
     """
     ohe = OneHotEncoder(sparse_output = False)
     ohe_lst = []
@@ -281,12 +335,25 @@ def handle_cat_columns(df, cat_columns):
 
 def training_pipeline(df, target_column: str, project_name: str):
     """
-    The complete training pipeline.
-    :param df: The pandas dataframe of the dataset.
-    :param target_column: The name of the target columns.
-    :param project_name: The name of the project you are working on.
-    :return: Scaled and Training ready features.
-    """
+       Executes a complete training pipeline: preprocessing, feature engineering,
+       imbalance handling, model training, and logging.
+
+       Args:
+           df (pd.DataFrame): Input dataset.
+           target_column (str): Name of the target column.
+           project_name (str): Name of the project for logging.
+
+       Returns:
+           tuple:
+               - dict: Trained models categorized by metric and overall performance.
+               - StandardScaler: Scaler used on numeric features.
+               - list: Indices of removed highly correlated features.
+               - list: One-hot encoders used with their column indices.
+               - list: TF-IDF vectorizers used with their column indices.
+               - np.ndarray: Scaled test features.
+               - pd.Series: Test labels.
+               - dict: Best model names for each metric.
+       """
     logger = SwiftPredict(project_name = project_name)
     new_df = df
     target = df[target_column]
@@ -339,9 +406,9 @@ def training_pipeline(df, target_column: str, project_name: str):
     if task == "classification":
         X_train, y_train = handle_imbalance(df, target_column = target_column, X_train = X_scaled, y_train = y_train )
 
-    best_models = train_model(task = task, X_train = X_train, y_train = y_train, logger = logger)
+    best_models, best_model_showcase = train_model(task = task, X_train = X_train, y_train = y_train, logger = logger)
 
-    return best_models, std_scaler, removed_columns, ohe_lst, vectorizer_lst, X_test, y_test
+    return best_models, std_scaler, removed_columns, ohe_lst, vectorizer_lst, X_test, y_test, best_model_showcase
 
 
 
