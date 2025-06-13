@@ -1,7 +1,7 @@
 # Importing dependencies
 import streamlit as st
 import requests
-from client.swift_predict import SwiftPredict
+from app.client.swift_predict import SwiftPredict
 from sklearn.linear_model import LogisticRegression
 from sklearn.datasets import make_classification
 from sklearn.model_selection import cross_val_score

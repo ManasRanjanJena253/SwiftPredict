@@ -10,7 +10,7 @@ from lightgbm import LGBMRegressor, LGBMClassifier
 from sklearn.model_selection import train_test_split, cross_validate
 from sklearn.metrics import make_scorer, accuracy_score, f1_score, precision_score, roc_auc_score
 from imblearn.over_sampling import SMOTE
-from client.swift_predict import SwiftPredict
+from app.client.swift_predict import SwiftPredict
 from statistics import multimode
 import pandas as pd
 import numpy as np
