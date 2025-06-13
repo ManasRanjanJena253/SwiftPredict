@@ -55,32 +55,6 @@ def log_param(key: str, value, run_id: str, project_name: str):
     else:
         return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"}
 
-@app.post("/{project_name}/runs/{run_id}/log_metric")
-def log_metric(key: str, value, step: int, run_id: str, project_name: str):
-    """
-    Logs a metric value at a given step for a specific run.
-
-    Args:
-        key (str): Metric name (e.g., accuracy, loss).
-        value (float): Metric value.
-        step (int): Training step or epoch.
-        run_id (str): Unique identifier of the run.
-        project_name (str): Name of the project.
-
-    Returns:
-        dict: Updated run data or error message.
-    """
-    data = run.find_one({"run_id": run_id, "project_name": project_name})
-    if data:
-        run.update_one({"run_id": run_id, "project_name": project_name},
-                             {"$set": {"metrics.metric": key},
-                              "$push": {"metrics.details.step": float(step), "metrics.details.values": float(value)}})
-
-        return run.find_one({"run_id": run_id, "project_name": project_name}, {"_id": 0})
-
-    else:
-        return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"}
-
 @app.post("/{project_name}/runs/{run_id}/add_tags")
 def add_tags(run_id: str, project_name: str, tags: list):
     """
@@ -174,25 +148,39 @@ def fetch_run_id(run_id: str, project_name: str):
     Returns:
         dict: Run details or error message.
     """
-    docs = run.find_one({"run_id": run_id, "project_name": project_name}, {"_id": 0})
+    docs = run.find({"run_id": run_id, "project_name": project_name}, {"model_name": 1, "run_id": 1, "metrics.metric": 1, "created_at": 1, "project_name": 1, "_id": 0}).to_list()
     if docs:
         return docs
     else:
         return {"Error": f"Run_Id : {run_id}, DOESN'T EXIST"}
 
-@app.get("/projects")
-def get_all_projects():
+@app.get("/projects/dl")
+def get_all_dl_projects():
     """
     Retrieves a list of all distinct project names.
 
     Returns:
         list or dict: List of project names or an error message.
     """
-    projects = run.distinct("project_name")
+    projects = run.find({"project_type": "DL"}, {"model_name": 1, "run_id": 1, "metrics.metric": 1, "created_at": 1, "project_name": 1, "_id": 0}).to_list()
     if projects:
         return projects
     else:
-        return {"Error": "No, Projects made/saved yet."}
+        return {"Error": "No, DL Projects found"}
+
+@app.get("/projects/ml")
+def get_all_ml_projects():
+    """
+    Retrieves a list of all distinct project names.
+
+    Returns:
+        list or dict: List of project names or an error message.
+    """
+    projects = run.find({"project_type": "ML"}, {"model_name": 1, "run_id": 1, "metrics.metric": 1, "created_at": 1, "project_name": 1, "_id": 0}).to_list()
+    if projects:
+        return projects
+    else:
+        return {"Error": "No, ML Projects found"}
 
 @app.get("/{project_name}/plots/available_metrics")
 def get_available_metrics(project_name: str):
@@ -214,6 +202,7 @@ def get_available_metrics(project_name: str):
 def plot_metrics(metric: str, run_id: str, project_name: str):
     """
     Generates and returns a plot image for a specific metric of a run.
+    Only used in case of DL project type.
 
     Args:
         metric (str): Name of the metric (e.g., 'loss').
@@ -224,7 +213,7 @@ def plot_metrics(metric: str, run_id: str, project_name: str):
         StreamingResponse or dict: PNG image stream of the plot or error message.
     """
 
-    data = run.find_one({"run_id": run_id, "project_name": project_name, "metrics.metric": metric.lower()})
+    data = run.find_one({"run_id": run_id, "project_name": project_name, "metrics.metric": metric.lower(), "project_type": "DL"})
     if data:
         values = data["metrics"]["details"]
         steps = values["step"]
@@ -246,7 +235,7 @@ def plot_metrics(metric: str, run_id: str, project_name: str):
         return StreamingResponse(buf, media_type = "image/png")
 
     else:
-        return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST OR The metrics field DOESN'T EXIST."}
+        return {"Error": f"Run_Id : {run_id} or Project: {project_name} of DL project_type DOESN'T EXIST OR The metrics field DOESN'T EXIST."}
 
 @app.delete("/projects/delete")
 def delete_projects(project_name: str, run_id: str = None):

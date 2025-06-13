@@ -1,12 +1,14 @@
 # Importing dependencies
 from sklearn.preprocessing import StandardScaler, LabelEncoder, OneHotEncoder
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.decomposition import TruncatedSVD
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from xgboost import XGBRegressor, XGBClassifier
 from lightgbm import LGBMRegressor, LGBMClassifier
 from sklearn.model_selection import train_test_split, cross_validate
+from sklearn.metrics import make_scorer, accuracy_score, f1_score, precision_score, roc_auc_score
 from imblearn.over_sampling import SMOTE
 from client.swift_predict import SwiftPredict
 from statistics import multimode
@@ -15,8 +17,14 @@ import numpy as np
 from scipy.stats import normaltest
 from tqdm.auto import tqdm
 import warnings
+import string
+import spacy
+import re
 warnings.filterwarnings("ignore")
 
+
+tqdm.pandas(desc = "Preprocessing text")
+nlp = spacy.load("en_core_web_sm", disable=["ner", "parser"])  # Only keep tagger + lemmatizer for speed
 
 def get_dtype_columns(df):
     """
@@ -36,6 +44,31 @@ def get_dtype_columns(df):
 
     return {"categorical": cat_columns, "numeric": num_columns, "date": date_columns, "bool": bool_columns}
 
+def text_preprocessor(text: str, handle_emojis: bool = False, handle_html: bool = False) -> str:
+    """
+    Preprocesses input text:
+    - Optionally removes HTML
+    - Removes punctuation
+    - Removes stopwords
+    - Lemmatizes words
+    """
+
+    # Optional: Remove HTML
+    if handle_html:
+        text = re.sub(r'<.*?>', '', text)
+
+    # Removing punctuation
+    text = str(text).translate(str.maketrans('', '', string.punctuation))
+
+    # Processing with spaCy
+    doc = nlp(text)
+
+    # Lemmatizing and remove stopwords and non-alphabetic tokens
+    tokens = [token.lemma_.lower() for token in doc if not token.is_stop]
+
+    if tokens:
+        return " ".join(tokens)
+
 def handle_null_values(df):
     """
      Handles missing values in the DataFrame using intelligent strategies.
@@ -48,7 +81,7 @@ def handle_null_values(df):
                        filling with mean/mode, or interpolation.
      """
     total_null_rows = df.isnull().any(axis = 1).sum()   # Will give the total no. of rows having null values.
-    total_rows = df.any(axis = 1).sum()   # Gives the total no. of rows in the data.
+    total_rows = len(df)  # Gives the total no. of rows in the data.
 
     if total_null_rows:    # Checking if there are any null values or not.
 
@@ -64,16 +97,15 @@ def handle_null_values(df):
             num_columns = columns["numeric"]
 
             for k in null_columns:
-                if k in cat_columns or bool_columns:
-                    df[k] = df[k].fillna(value = df[k].mode())
+                if k in cat_columns or k in bool_columns:
+                    df[k] = df[k].fillna(value = df[k].mode()[0])
 
                 elif k in num_columns:
                     stats, p_value = normaltest(df[k])    # Checking if the data is normally distributed or not.
                     if p_value > 0.05:
                         df[k] = df[k].fillna(value = df[k].mean())
-
                     else:
-                        df[k] = df[k].fillna(value = df[k].mode())
+                        df[k] = df[k].fillna(value = df[k].mode()[0])
 
                 else :
                     df[k] = df[k].interpolate(method = "time")
@@ -168,6 +200,7 @@ def train_model(task, X_train, y_train, logger):
         X_train (np.ndarray): Training features.
         y_train (np.ndarray or pd.Series): Training labels.
         logger (SwiftPredict): Logger object for metric and parameter logging.
+        log_only_best (bool): If set to true only logs the best model.
 
     Returns:
         tuple:
@@ -181,27 +214,38 @@ def train_model(task, X_train, y_train, logger):
         avg_roc = []
         models = model_zoo(task = task)
         trained_models = {}
-        scoring_methods = ["accuracy", "f1", "roc_auc", "precision"]
-        for k in tqdm(models):     # Training each classification model in model zoo.
-            if k.__name__ == "LGBMClassifier":
-                model = k(verbose = -1)
+        scoring_methods = {
+            "accuracy": make_scorer(accuracy_score),
+            "f1": make_scorer(f1_score, average = 'weighted', zero_division = 0),
+            "precision": make_scorer(precision_score, average = 'weighted', zero_division = 0),
+            "roc_auc": make_scorer(roc_auc_score, multi_class = 'ovr', average = "weighted")
+        }
+        for k in tqdm(models, desc = "Training the Models"):     # Training each classification model in model zoo.
+            if k.__name__ != "GaussianNB":
+                if k.__name__ == "LGBMClassifier":
+                    model = k(verbose = -1, n_jobs = -1)
+                elif k.__name__ == "LogisticRegression":
+                    model = k(solver = "saga", n_jobs = -1)
+                else:
+                    model = k(n_jobs=-1)
             else :
                 model = k()
-            cv = cross_validate(estimator = model, X = X_train, y = y_train, cv = 10, scoring = scoring_methods)
+
+            cv = cross_validate(estimator = model, X = X_train, y = y_train, cv = 5, scoring = scoring_methods)
             acc = cv["test_accuracy"]
             f1 = cv["test_f1"]
             roc = cv["test_roc_auc"]
+            print(roc)
             precision = cv["test_precision"]
             trained_models[str(k)] = model.fit(X_train, y_train)
-            logger.log_param(key = "model", value = str(k))
-            for key, value in model.get_params().items():
-                logger.log_param(key = key, value = value)
 
-            for step in range(len(acc)):
-                logger.log_metric(step = step, value = acc[step], key = "accuracy")
-                logger.log_metric(step = step, value = f1[step], key = "f1_score")
-                logger.log_metric(step = step, value = roc[step], key = "roc_auc")
-                logger.log_metric(step = step, value = precision[step], key = "precision")
+            for key, value in model.get_params().items():
+                logger.log_param(key = key, value = value, model_name = type(model).__name__)
+
+            logger.log_or_update_metric(value = acc.mean(), key = "accuracy", model_name = type(model).__name__)
+            logger.log_or_update_metric(value = f1.mean(), key = "f1_score", model_name = type(model).__name__)
+            logger.log_or_update_metric(value = roc.mean().item(), key = "roc_auc", model_name = type(model).__name__)
+            logger.log_or_update_metric(value = precision.mean(), key = "precision", model_name = type(model).__name__)
 
             avg_roc.append(roc.mean())
             avg_precision.append(precision.mean())
@@ -234,7 +278,7 @@ def train_model(task, X_train, y_train, logger):
         best_model_showcase = {}
 
         for metric, model in best_models.items():
-            best_model_showcase[metric] = str(type(model).__name__) if str(type(model).__name__) != 'list' else [str(type(k).__name__) for k in model ]
+            best_model_showcase[metric] = type(model).__name__ if type(model).__name__ != 'list' else [type(k).__name__ for k in model ]
 
         return best_models, best_model_showcase
 
@@ -246,19 +290,20 @@ def train_model(task, X_train, y_train, logger):
 
         models = model_zoo(task = task)
         scoring_methods = ["neg_mean_squared_error", "neg_mean_absolute_error", "r2"]
-        for k in tqdm(models):  # Training each classification model in model zoo.
+        for k in tqdm(models, desc = "Training the Models"):  # Training each classification model in model zoo.
             model = k()
             cv = cross_validate(estimator = model, X = X_train, y = y_train, cv = 5, scoring = scoring_methods)
             neg_mse = cv["test_neg_mean_squared_error"]
             neg_mae = cv["test_neg_mean_absolute_error"]
             r2 = cv["test_r2"]
             trained_models[str(k)] = model.fit(X_train, y_train)
-            logger.log_params(model.get_params())
 
-            for step in range(len(neg_mse)):
-                logger.log_metric(step = step, value = -1 * neg_mse[step], key = "MSE")
-                logger.log_metric(step = step, value = -1 * neg_mae[step], key = "MAE")
-                logger.log_metric(step = step, value = r2[step], key = "R2")
+            for key, value in model.get_params().items():
+                logger.log_param(key = key, value = value, model_name = type(model).__name__)
+
+            logger.log_or_update_metric(value = -1 * neg_mse.mean(), key = "MSE", model_name = type(model).__name__)
+            logger.log_or_update_metric(value = -1 * neg_mae.mean(), key = "MAE", model_name = type(model).__name__)
+            logger.log_or_update_metric(value = r2.mean(), key = "R2", model_name = type(model).__name__)
 
             avg_neg_mse.append(neg_mse.mean())
             avg_neg_mae.append(neg_mae.mean())
@@ -289,13 +334,14 @@ def train_model(task, X_train, y_train, logger):
 
         return best_models, best_model_showcase
 
-def handle_cat_columns(df, cat_columns):
+def handle_cat_columns(df, cat_columns, handle_html: bool = False):
     """
     Encodes categorical columns using OneHotEncoding or TF-IDF based on cardinality.
 
     Args:
         df (pd.DataFrame): The input DataFrame.
         cat_columns (list): List of categorical column names.
+        handle_html (bool): If there are html tags in the data or not.
 
     Returns:
         tuple:
@@ -303,7 +349,7 @@ def handle_cat_columns(df, cat_columns):
             - list: List of tuples (column index, fitted OneHotEncoder).
             - list: List of tuples (column index, fitted TfidfVectorizer).
     """
-    ohe = OneHotEncoder(sparse_output = False)
+    ohe = OneHotEncoder(sparse_output = False, handle_unknown = "ignore")
     ohe_lst = []
     new_df = df
     vectorizer_lst = []
@@ -323,17 +369,42 @@ def handle_cat_columns(df, cat_columns):
 
             else:
                 vectorizer = TfidfVectorizer()
-                tfidf_array = vectorizer.fit_transform(new_df[k].astype(str)).toarray()
-                tfidf_df = pd.DataFrame(tfidf_array, columns=[f"{k}_tfidf_{i}" for i in range(tfidf_array.shape[1])],
-                                        index=new_df.index)
-                new_df = pd.concat([new_df, tfidf_df], axis=1)
+                print(f"Preprocessing column: {k}")
+                new_df[k] = new_df[k].progress_apply(lambda x: text_preprocessor(x, handle_html=handle_html))
 
-                vectorizer_lst.append((new_df.columns.get_loc(k), vectorizer))  # store vectorizer with original column name
+                tfidf_array = vectorizer.fit_transform(new_df[k].astype(str))
+
+                # Check if there are at least 2 features to apply SVD
+                if tfidf_array.shape[1] >= 2:
+                    max_components = min(300, tfidf_array.shape[1] - 1)  # n_components must be < n_features
+                    svd_temp = TruncatedSVD(n_components=max_components)
+                    svd_temp.fit(tfidf_array)
+
+                    cumulative_variance = np.cumsum(svd_temp.explained_variance_ratio_)
+                    optimal_components = np.searchsorted(cumulative_variance, 0.95) + 1
+                    optimal_components = min(optimal_components, max_components)  # Ensure it doesn't exceed limit
+
+                    svd = TruncatedSVD(n_components=optimal_components)
+                    tfidf_reduced = svd.fit_transform(tfidf_array)
+
+                    svd_df = pd.DataFrame(
+                        tfidf_reduced,
+                        columns=[f"{k}_svd_{i}" for i in range(tfidf_reduced.shape[1])],
+                        index=new_df.index
+                    )
+                    new_df = pd.concat([new_df, svd_df], axis=1)
+
+                    vectorizer_lst.append((new_df.columns.get_loc(k), vectorizer, svd))
+                else:
+                    print(
+                        f"Skipping column '{k}' — Cannot apply SVD.")
+                    vectorizer_lst.append((new_df.columns.get_loc(k), vectorizer, None))
+
+                # Drop original column
                 new_df.drop(columns=[k], inplace=True)
-
     return new_df, ohe_lst, vectorizer_lst
 
-def training_pipeline(df, target_column: str, project_name: str):
+def training_pipeline(df, target_column: str, project_name: str, drop_name: bool = True, drop_id: bool = True):
     """
        Executes a complete training pipeline: preprocessing, feature engineering,
        imbalance handling, model training, and logging.
@@ -342,6 +413,8 @@ def training_pipeline(df, target_column: str, project_name: str):
            df (pd.DataFrame): Input dataset.
            target_column (str): Name of the target column.
            project_name (str): Name of the project for logging.
+           drop_id (bool): If set to true removes the columns with name == ID or id or index.
+           drop_name (bool): If set to true removes the columns with name == name or Name.
 
        Returns:
            tuple:
@@ -354,14 +427,26 @@ def training_pipeline(df, target_column: str, project_name: str):
                - pd.Series: Test labels.
                - dict: Best model names for each metric.
        """
-    logger = SwiftPredict(project_name = project_name)
+    logger = SwiftPredict(project_name = project_name, project_type = "ML")
     new_df = df
     target = df[target_column]
+    # Handling categorical labels
+
+    if target.dtype == "object":
+        lbl_encoder = LabelEncoder()
+        new_df[target_column] = lbl_encoder.fit_transform(target)
+
+    """if drop_name:
+        new_df.drop([col for col in new_df.columns.tolist() if col.lower() == "name"], axis = 1, inplace = True)
+
+    if drop_id:
+        new_df.drop([col for col in new_df.columns.tolist() if col.lower() == "id" or "index"], axis = 1, inplace = True)"""
+
     columns = get_dtype_columns(new_df)
     cat_columns = columns["categorical"]
-    print(cat_columns)  # For debugging
+    #print(cat_columns)  # For debugging
     num_columns = columns["numeric"]
-    print(num_columns) # For debugging
+    #print(num_columns)  # For debugging
     ohe_lst = []
     vectorizer_lst = []
 
@@ -372,44 +457,38 @@ def training_pipeline(df, target_column: str, project_name: str):
     new_df = handle_null_values(new_df)
 
     # Handling bool dtypes  and Yes No :
-    new_df.replace(["True", "False"], [1, 0], inplace=True)
-    new_df.replace(["Yes", "No"], [1, 0], inplace=True)
+    new_df.replace(["True", "False"], [1, 0], inplace = True)
+    new_df.replace(["Yes", "No"], [1, 0], inplace = True)
 
     # Handling categorical data
     if cat_columns:
         new_df, ohe_lst, vectorizer_lst = handle_cat_columns(df = new_df, cat_columns = cat_columns)
 
     # Removing unnecessary columns
-    corr = new_df[num_columns].corr()
-    direct_corr = [col for col in corr.columns if corr[col].abs().max() == 1]   # Getting the columns having correlation 1
-    useful_col_len = len(direct_corr)//2
+    corr = new_df[[col for col in num_columns if col != target_column]].corr()
+    direct_corr = [col for col in corr.columns if
+                   corr[col].abs().max() == 1]  # Getting the columns having correlation 1
+    useful_col_len = len(direct_corr) // 2
     removed_columns = []
     while len(direct_corr) > useful_col_len:
-        removed_columns.append(new_df.columns.get_loc(direct_corr[- 1]))   # Appending the index of the removed columns
+        removed_columns.append(new_df.columns.get_loc(direct_corr[- 1]))  # Appending the index of the removed columns
         new_df.drop([direct_corr.pop()], inplace = True, axis = 1)
+
+    new_df = handle_null_values(new_df)   # Ensuring before splitting that no null values are created due to preprocessing.
 
     # Splitting the data
     X = new_df.drop([target_column], axis = 1)
-    y = target
+    y = new_df[target_column]
     X_train, X_test, y_train, y_test = train_test_split(X, y, stratify = y, random_state = 21)
 
     # Scaling numerical data
     std_scaler = StandardScaler()
-    X_scaled= std_scaler.fit_transform(X_train)
+    X_scaled = std_scaler.fit_transform(X_train)
     X_test = std_scaler.transform(X_test)
 
-    # Handling categorical labels
-    if y_train.dtype == "string":
-        lbl_encoder = LabelEncoder()
-        y_train = lbl_encoder.fit_transform(y_train)
-
     if task == "classification":
-        X_train, y_train = handle_imbalance(df, target_column = target_column, X_train = X_scaled, y_train = y_train )
+        X_train, y_train = handle_imbalance(df, target_column = target_column, X_train = X_scaled, y_train = y_train)
 
     best_models, best_model_showcase = train_model(task = task, X_train = X_train, y_train = y_train, logger = logger)
 
-    return best_models, std_scaler, removed_columns, ohe_lst, vectorizer_lst, X_test, y_test, best_model_showcase
-
-
-
-
+    return best_models, std_scaler, removed_columns, ohe_lst, vectorizer_lst, X_test, y_test, best_model_showcase, new_df

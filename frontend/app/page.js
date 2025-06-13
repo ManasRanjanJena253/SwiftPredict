@@ -1,570 +1,401 @@
-'use client';
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, Database, Brain, Activity, Send, Download, Upload, Settings, Home, Menu, X, FileText, BarChart3, Trash2 } from 'lucide-react';
+import { Search, Database, Activity, BarChart3, Settings, Play, Trash2, Eye, Tag, FileText, ChevronDown, ChevronRight, X } from 'lucide-react';
 
 const SwiftPredictUI = () => {
-  const [activeTab, setActiveTab] = useState('home');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeEndpoint, setActiveEndpoint] = useState('dashboard');
   const [loading, setLoading] = useState(false);
-  const [apiResponse, setApiResponse] = useState('');
-  const [selectedEndpoint, setSelectedEndpoint] = useState(null);
+  const [data, setData] = useState([]);
   const [formData, setFormData] = useState({});
+  const [showModal, setShowModal] = useState(false);
   const [projects, setProjects] = useState([]);
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [error, setError] = useState('');
 
-  // API base URL - adjust this to your FastAPI server
-  const API_BASE = 'http://localhost:9000';
+  const API_BASE = 'http://localhost:8000';
 
-  // Define your API endpoints based on your FastAPI code
-  const automlApis = [
-    {
-      path: '/automl/train',
-      method: 'POST',
-      summary: 'Train AutoML Model',
-      description: 'Upload CSV file and train AutoML models',
-      tags: ['automl'],
-      requiresFile: true,
-      parameters: ['project_name', 'target_column']
-    },
-    {
-      path: '/automl/predict',
-      method: 'GET',
-      summary: 'Make Predictions',
-      description: 'Get predictions from trained model',
-      tags: ['automl'],
-      parameters: ['data']
-    }
-  ];
-
-  const loggerApis = [
-    {
-      path: '/{project_name}/runs/{run_id}/log_param',
-      method: 'POST',
-      summary: 'Log Parameter',
-      description: 'Log parameters used when training a model',
-      tags: ['logger'],
-      parameters: ['key', 'value', 'run_id', 'project_name']
-    },
-    {
-      path: '/{project_name}/runs/{run_id}/log_metric',
-      method: 'POST',
-      summary: 'Log Metric',
-      description: 'Log metrics for model evaluation',
-      tags: ['logger'],
-      parameters: ['key', 'value', 'step', 'run_id', 'project_name']
-    },
-    {
-      path: '/{project_name}/runs/{run_id}/add_tags',
-      method: 'POST',
-      summary: 'Add Tags',
-      description: 'Add tags to existing runs',
-      tags: ['logger'],
-      parameters: ['run_id', 'project_name', 'tags']
-    },
-    {
-      path: '/{project_name}/runs/{run_id}/update_status',
-      method: 'POST',
-      summary: 'Update Status',
-      description: 'Update the running status of a project',
-      tags: ['logger'],
-      parameters: ['run_id', 'project_name', 'status']
-    },
-    {
-      path: '/{project_name}/runs/{run_id}/add_notes',
-      method: 'POST',
-      summary: 'Add Notes',
-      description: 'Add notes for experiment description',
-      tags: ['logger'],
-      parameters: ['run_id', 'project_name', 'notes']
-    },
-    {
-      path: '/projects/{status}',
-      method: 'GET',
-      summary: 'Get Projects by Status',
-      description: 'Get all projects with specific status',
-      tags: ['logger'],
-      parameters: ['status']
-    },
-    {
-      path: '/{project_name}/runs/{run_id}',
-      method: 'GET',
-      summary: 'Fetch Run Details',
-      description: 'Fetch all data for a specific run_id',
-      tags: ['logger'],
-      parameters: ['run_id', 'project_name']
-    },
-    {
-      path: '/projects',
-      method: 'GET',
-      summary: 'Get All Projects',
-      description: 'Get all distinct projects',
-      tags: ['logger']
-    },
-    {
-      path: '/{project_name}/plots/available_metrics',
-      method: 'GET',
-      summary: 'Available Metrics',
-      description: 'Get all available metrics for a project',
-      tags: ['logger'],
-      parameters: ['project_name']
-    },
-    {
-      path: '/{project_name}/plots/{metric}',
-      method: 'GET',
-      summary: 'Plot Metrics',
-      description: 'Generate metric plots for visualization',
-      tags: ['logger'],
-      parameters: ['metric', 'run_id', 'project_name']
-    },
-    {
-      path: '/projects/delete',
-      method: 'DELETE',
-      summary: 'Delete Projects',
-      description: 'Delete projects by name or run_id',
-      tags: ['logger'],
-      parameters: ['project_name', 'run_id']
-    },
-    {
-      path: '/delete_all',
-      method: 'DELETE',
-      summary: 'Delete All Records',
-      description: 'Delete all records of all projects',
-      tags: ['logger']
-    }
+  const endpoints = [
+    { id: 'dashboard', name: 'Dashboard', icon: Database, method: 'GET' },
+    { id: 'log_param', name: 'Log Parameter', icon: Settings, method: 'POST', params: ['project_name', 'run_id', 'key', 'value'] },
+    { id: 'log_metric', name: 'Log Metric', icon: Activity, method: 'POST', params: ['project_name', 'run_id', 'key', 'value', 'step'] },
+    { id: 'add_tags', name: 'Add Tags', icon: Tag, method: 'POST', params: ['project_name', 'run_id', 'tags'] },
+    { id: 'update_status', name: 'Update Status', icon: Play, method: 'POST', params: ['project_name', 'run_id', 'status'] },
+    { id: 'add_notes', name: 'Add Notes', icon: FileText, method: 'POST', params: ['project_name', 'run_id', 'notes'] },
+    { id: 'projects_by_status', name: 'Projects by Status', icon: Search, method: 'GET', params: ['status'] },
+    { id: 'fetch_run', name: 'Fetch Run', icon: Eye, method: 'GET', params: ['project_name', 'run_id'] },
+    { id: 'dl_projects', name: 'DL Projects', icon: BarChart3, method: 'GET' },
+    { id: 'ml_projects', name: 'ML Projects', icon: BarChart3, method: 'GET' },
+    { id: 'available_metrics', name: 'Available Metrics', icon: BarChart3, method: 'GET', params: ['project_name'] },
+    { id: 'plot_metrics', name: 'Plot Metrics', icon: BarChart3, method: 'GET', params: ['project_name', 'run_id', 'metric'] },
+    { id: 'delete_projects', name: 'Delete Projects', icon: Trash2, method: 'DELETE', params: ['project_name', 'run_id'] }
   ];
 
   useEffect(() => {
-    fetchProjects();
+    fetchDashboardData();
   }, []);
 
-  const fetchProjects = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/projects`);
-      const data = await response.json();
-      setProjects(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Failed to fetch projects:', error);
-      setProjects([]);
-    }
-  };
-
-  const executeApi = async (endpoint) => {
+  const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      let url = `${API_BASE}${endpoint.path}`;
+      const [dlResponse, mlResponse] = await Promise.all([
+        fetch(`${API_BASE}/projects/dl`),
+        fetch(`${API_BASE}/projects/ml`)
+      ]);
 
-      // Replace path parameters with actual values
-      if (formData.project_name) {
-        url = url.replace('{project_name}', formData.project_name);
-      }
-      if (formData.run_id) {
-        url = url.replace('{run_id}', formData.run_id);
-      }
-      if (formData.status) {
-        url = url.replace('{status}', formData.status);
-      }
-      if (formData.metric) {
-        url = url.replace('{metric}', formData.metric);
-      }
+      const dlData = await dlResponse.json();
+      const mlData = await mlResponse.json();
 
-      const options = {
-        method: endpoint.method,
-        headers: {}
-      };
+      const combinedData = [
+        ...(Array.isArray(dlData) ? dlData.map(p => ({ ...p, type: 'Deep Learning' })) : []),
+        ...(Array.isArray(mlData) ? mlData.map(p => ({ ...p, type: 'Machine Learning' })) : [])
+      ];
 
-      if (endpoint.requiresFile && selectedFile) {
-        const formDataObj = new FormData();
-        formDataObj.append('file', selectedFile);
-        if (formData.project_name) formDataObj.append('project_name', formData.project_name);
-        if (formData.target_column) formDataObj.append('target_column', formData.target_column);
-        options.body = formDataObj;
-      } else if (endpoint.method !== 'GET' && Object.keys(formData).length > 0) {
-        options.headers['Content-Type'] = 'application/json';
-
-        // For POST requests, send as query parameters for your API structure
-        const queryParams = new URLSearchParams();
-        Object.entries(formData).forEach(([key, value]) => {
-          if (value && !['project_name', 'run_id', 'status', 'metric'].includes(key)) {
-            if (Array.isArray(value)) {
-              queryParams.append(key, JSON.stringify(value));
-            } else {
-              queryParams.append(key, value);
-            }
-          }
-        });
-
-        if (queryParams.toString()) {
-          url += (url.includes('?') ? '&' : '?') + queryParams.toString();
-        }
-      } else if (endpoint.method === 'GET' && Object.keys(formData).length > 0) {
-        const queryParams = new URLSearchParams();
-        Object.entries(formData).forEach(([key, value]) => {
-          if (value && !['project_name', 'run_id', 'status', 'metric'].includes(key)) {
-            queryParams.append(key, value);
-          }
-        });
-
-        if (queryParams.toString()) {
-          url += (url.includes('?') ? '&' : '?') + queryParams.toString();
-        }
-      }
-
-      const response = await fetch(url, options);
-
-      // Handle image responses (for plot endpoints)
-      if (response.headers.get('content-type')?.includes('image')) {
-        const blob = await response.blob();
-        const imageUrl = URL.createObjectURL(blob);
-        setApiResponse(`Image URL: ${imageUrl}\n\n[Image will be displayed in browser]`);
-        // Open image in new tab
-        window.open(imageUrl, '_blank');
-      } else {
-        const data = await response.json();
-        setApiResponse(JSON.stringify(data, null, 2));
-      }
+      setData(combinedData);
+      setProjects([...new Set(combinedData.map(p => p.project_name))]);
     } catch (error) {
-      setApiResponse(`Error: ${error.message}`);
+      setError('Failed to fetch dashboard data');
     } finally {
       setLoading(false);
     }
   };
 
-  const Sidebar = () => (
-    <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-gradient-to-b from-amber-900 to-amber-800 shadow-xl transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:inset-0`}>
-      <div className="flex items-center justify-between h-16 px-6 border-b border-amber-700/30">
-        <h1 className="text-xl font-bold text-amber-100">SwiftPredict</h1>
-        <button
-          onClick={() => setSidebarOpen(false)}
-          className="lg:hidden text-amber-200 hover:text-white transition-colors"
-        >
-          <X size={20} />
-        </button>
-      </div>
+  const executeEndpoint = async (endpoint) => {
+    try {
+      setLoading(true);
+      setError('');
 
-      <nav className="mt-8">
-        {[
-          { id: 'home', label: 'Dashboard', icon: Home },
-          { id: 'automl', label: 'AutoML APIs', icon: Brain },
-          { id: 'logger', label: 'Logger APIs', icon: Activity },
-          { id: 'settings', label: 'Settings', icon: Settings }
-        ].map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => {
-              setActiveTab(id);
-              setSidebarOpen(false);
-            }}
-            className={`w-full flex items-center px-6 py-3 text-left transition-all duration-200 hover:bg-amber-700/30 ${
-              activeTab === id ? 'bg-amber-700/40 border-r-2 border-yellow-500 text-white font-medium' : 'text-amber-100 hover:text-white'
-            }`}
-          >
-            <Icon size={20} className="mr-3" />
-            {label}
-          </button>
-        ))}
-      </nav>
-    </div>
-  );
+      let url = `${API_BASE}`;
 
-  const ApiCard = ({ endpoint, type }) => (
-    <div className="bg-amber-50 rounded-lg p-6 border border-amber-200 hover:border-yellow-600 transition-all duration-300 hover:shadow-lg shadow-sm">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center space-x-3">
-          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-            endpoint.method === 'GET' ? 'bg-green-100 text-green-800' :
-            endpoint.method === 'POST' ? 'bg-amber-100 text-amber-800' :
-            endpoint.method === 'DELETE' ? 'bg-red-100 text-red-800' :
-            'bg-yellow-100 text-yellow-800'
-          }`}>
-            {endpoint.method}
-          </span>
-          <code className="text-amber-900 font-mono text-sm bg-amber-100 px-2 py-1 rounded">
-            {endpoint.path}
-          </code>
-        </div>
-        <ChevronRight className="text-yellow-700" size={16} />
-      </div>
+      switch (endpoint.id) {
+        case 'log_param':
+          url += `/${formData.project_name}/runs/${formData.run_id}/log_param?key=${formData.key}&value=${formData.value}`;
+          break;
+        case 'log_metric':
+          url += `/${formData.project_name}/runs/${formData.run_id}/log_metric?key=${formData.key}&value=${formData.value}&step=${formData.step}`;
+          break;
+        case 'add_tags':
+          url += `/${formData.project_name}/runs/${formData.run_id}/add_tags`;
+          break;
+        case 'update_status':
+          url += `/${formData.project_name}/runs/${formData.run_id}/update_status?status=${formData.status}`;
+          break;
+        case 'add_notes':
+          url += `/${formData.project_name}/runs/${formData.run_id}/add_notes`;
+          break;
+        case 'projects_by_status':
+          url += `/projects/${formData.status}`;
+          break;
+        case 'fetch_run':
+          url += `/${formData.project_name}/runs/${formData.run_id}`;
+          break;
+        case 'dl_projects':
+          url += '/projects/dl';
+          break;
+        case 'ml_projects':
+          url += '/projects/ml';
+          break;
+        case 'available_metrics':
+          url += `/${formData.project_name}/plots/available_metrics`;
+          break;
+        case 'plot_metrics':
+          url += `/${formData.project_name}/plots/${formData.metric}?run_id=${formData.run_id}`;
+          break;
+        case 'delete_projects':
+          url += `/projects/delete?project_name=${formData.project_name}${formData.run_id ? `&run_id=${formData.run_id}` : ''}`;
+          break;
+        default:
+          return;
+      }
 
-      <h3 className="text-amber-900 font-semibold mb-2">{endpoint.summary}</h3>
-      <p className="text-amber-700 text-sm mb-4">{endpoint.description}</p>
+      const options = {
+        method: endpoint.method,
+        headers: { 'Content-Type': 'application/json' }
+      };
 
-      <div className="flex space-x-2">
-        <button
-          onClick={() => {
-            setSelectedEndpoint(endpoint);
-            setFormData({});
-            setSelectedFile(null);
-          }}
-          className="flex items-center px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-lg transition-colors duration-200 text-sm"
-          style={{ backgroundColor: '#996515' }}
-        >
-          <Send size={14} className="mr-2" />
-          Test API
-        </button>
-        {endpoint.method === 'GET' && (
-          <button
-            onClick={() => executeApi(endpoint)}
-            className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors duration-200 text-sm"
-          >
-            <Download size={14} className="mr-2" />
-            Fetch
-          </button>
-        )}
-      </div>
-    </div>
-  );
-
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'home':
-        return (
-          <div className="space-y-8">
-            <div className="text-center py-12">
-              <div className="mb-6">
-                <Database className="mx-auto text-yellow-700" size={64} style={{ color: '#996515' }} />
-              </div>
-              <h1 className="text-4xl font-bold text-amber-900 mb-4">
-                SwiftPredict
-              </h1>
-              <p className="text-xl text-amber-700 mb-8 max-w-2xl mx-auto">
-                Your compass from data to discovery. Explore powerful AutoML capabilities and comprehensive logging solutions.
-              </p>
-              <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-                <div className="bg-gradient-to-br from-amber-50 to-amber-100 p-8 rounded-xl border border-amber-200">
-                  <Brain className="text-amber-700 mb-4" size={48} style={{ color: '#996515' }} />
-                  <h3 className="text-xl font-semibold text-amber-900 mb-2">AutoML APIs</h3>
-                  <p className="text-amber-700 mb-4">Train, predict, and manage machine learning models with ease.</p>
-                  <span className="text-yellow-700 font-medium" style={{ color: '#CCAA00' }}>{automlApis.length} endpoints available</span>
-                </div>
-                <div className="bg-gradient-to-br from-green-50 to-green-100 p-8 rounded-xl border border-green-200">
-                  <Activity className="text-green-600 mb-4" size={48} />
-                  <h3 className="text-xl font-semibold text-amber-900 mb-2">Logger APIs</h3>
-                  <p className="text-amber-700 mb-4">Monitor, track, and analyze your system activities.</p>
-                  <span className="text-green-700 font-medium">{loggerApis.length} endpoints available</span>
-                </div>
-              </div>
-
-              {projects.length > 0 && (
-                <div className="mt-12">
-                  <h2 className="text-2xl font-bold text-amber-900 mb-4">Your Projects</h2>
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    {projects.map((project, index) => (
-                      <span key={index} className="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-sm">
-                        {project}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+      if (endpoint.method === 'POST' && ['add_tags', 'add_notes'].includes(endpoint.id)) {
+        options.body = JSON.stringify(
+          endpoint.id === 'add_tags'
+            ? { tags: formData.tags.split(',').map(t => t.trim()) }
+            : { notes: formData.notes }
         );
+      }
 
-      case 'automl':
-        return (
-          <div>
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold text-amber-900 mb-2">AutoML APIs</h2>
-              <p className="text-amber-700">Manage your machine learning workflows</p>
-            </div>
+      const response = await fetch(url, options);
 
-            <div className="grid gap-6">
-              {automlApis.map((endpoint, index) => (
-                <ApiCard key={index} endpoint={endpoint} type="automl" />
-              ))}
-            </div>
-          </div>
-        );
+      if (response.headers.get('content-type')?.includes('image')) {
+        const blob = await response.blob();
+        const imageUrl = URL.createObjectURL(blob);
+        window.open(imageUrl, '_blank');
+        setData([{ message: 'Chart opened in new tab' }]);
+      } else {
+        const result = await response.json();
 
-      case 'logger':
-        return (
-          <div>
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold text-amber-900 mb-2">Logger APIs</h2>
-              <p className="text-amber-700">Monitor and manage system logs</p>
-            </div>
+        if (Array.isArray(result)) {
+          setData(result.map(item => ({ ...item, type: endpoint.id.includes('dl') ? 'Deep Learning' : 'Machine Learning' })));
+        } else if (result.data && Array.isArray(result.data)) {
+          setData(result.data);
+        } else if (result.all_available_metrics && Array.isArray(result.all_available_metrics)) {
+          setData(result.all_available_metrics);
+        } else {
+          setData([result]);
+        }
+      }
 
-            <div className="grid gap-6">
-              {loggerApis.map((endpoint, index) => (
-                <ApiCard key={index} endpoint={endpoint} type="logger" />
-              ))}
-            </div>
-          </div>
-        );
+      setShowModal(false);
+      setFormData({});
 
-      case 'settings':
-        return (
-          <div>
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold text-amber-900 mb-2">Settings</h2>
-              <p className="text-amber-700">Configure your SwiftPredict environment</p>
-            </div>
-
-            <div className="bg-amber-50 rounded-lg p-6 border border-amber-200 shadow-sm">
-              <h3 className="text-amber-900 font-semibold mb-4">API Configuration</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-amber-800 text-sm font-medium mb-2">
-                    Base URL
-                  </label>
-                  <input
-                    type="text"
-                    value={API_BASE}
-                    className="w-full px-4 py-2 bg-amber-100 border border-amber-300 rounded-lg text-amber-900 focus:border-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-200"
-                    placeholder="http://localhost:9000"
-                    style={{ backgroundColor: '#E8D6B9' }}
-                  />
-                </div>
-                <button
-                  className="px-6 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-lg transition-colors duration-200"
-                  style={{ backgroundColor: '#996515' }}
-                >
-                  Save Configuration
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
+      if (endpoint.method !== 'GET') {
+        fetchDashboardData();
+      }
+    } catch (error) {
+      setError(`Error: ${error.message}`);
+      setData([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  return (
-    <div className="flex h-screen" style={{ backgroundColor: '#F5E6CC' }}>
-      {/* Sidebar - Hidden on mobile, always visible on desktop */}
-      <div className="hidden lg:block">
-        <Sidebar />
-      </div>
+  const openModal = (endpoint) => {
+    setActiveEndpoint(endpoint.id);
+    setFormData({});
+    setShowModal(true);
+  };
 
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <>
-          <div
-            className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
-            onClick={() => setSidebarOpen(false)}
-          />
-          <div className="lg:hidden">
-            <Sidebar />
+  const renderTable = () => {
+    if (!data.length) return <div className="text-center text-slate-500 py-8">No data available</div>;
+
+    const firstItem = data[0];
+    const columns = Object.keys(firstItem).filter(key => !['_id', '__v'].includes(key));
+
+    return (
+      <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-slate-200">
+        <table className="min-w-full divide-y divide-slate-200">
+          <thead className="bg-slate-50">
+            <tr>
+              {columns.map(column => (
+                <th key={column} className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  {column.replace(/_/g, ' ')}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-slate-200">
+            {data.map((item, index) => (
+              <tr key={index} className="hover:bg-slate-50">
+                {columns.map(column => (
+                  <td key={column} className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
+                    {typeof item[column] === 'object'
+                      ? JSON.stringify(item[column])
+                      : item[column]?.toString() || '-'}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const renderForm = (endpoint) => {
+    if (!endpoint.params) return null;
+
+    return (
+      <div className="space-y-4">
+        {endpoint.params.map(param => (
+          <div key={param}>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              {param.replace(/_/g, ' ').toUpperCase()}
+            </label>
+            {param === 'status' ? (
+              <select
+                value={formData[param] || ''}
+                onChange={(e) => setFormData({...formData, [param]: e.target.value})}
+                className="input-field"
+              >
+                <option value="">Select status</option>
+                <option value="running">Running</option>
+                <option value="completed">Completed</option>
+                <option value="failed">Failed</option>
+                <option value="paused">Paused</option>
+              </select>
+            ) : param === 'project_name' && projects.length > 0 ? (
+              <select
+                value={formData[param] || ''}
+                onChange={(e) => setFormData({...formData, [param]: e.target.value})}
+                className="input-field"
+              >
+                <option value="">Select project</option>
+                {projects.map(project => (
+                  <option key={project} value={project}>{project}</option>
+                ))}
+              </select>
+            ) : param === 'notes' ? (
+              <textarea
+                value={formData[param] || ''}
+                onChange={(e) => setFormData({...formData, [param]: e.target.value})}
+                className="input-field h-20"
+                placeholder={`Enter ${param.replace(/_/g, ' ')}`}
+              />
+            ) : (
+              <input
+                type={['value', 'step'].includes(param) ? 'number' : 'text'}
+                value={formData[param] || ''}
+                onChange={(e) => setFormData({...formData, [param]: e.target.value})}
+                className="input-field"
+                placeholder={`Enter ${param.replace(/_/g, ' ')}`}
+              />
+            )}
           </div>
-        </>
-      )}
-
-      {/* Mobile menu button */}
-      <div className="lg:hidden fixed top-4 left-4 z-50">
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className="p-2 text-white rounded-lg shadow-lg"
-          style={{ backgroundColor: '#996515' }}
-        >
-          <Menu size={20} />
-        </button>
+        ))}
       </div>
+    );
+  };
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-h-0">
-        <main className="flex-1 p-6 lg:p-8 overflow-y-auto">
-          {renderContent()}
-        </main>
-      </div>
+  const currentEndpoint = endpoints.find(e => e.id === activeEndpoint);
 
-      {/* API Test Modal */}
-      {selectedEndpoint && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-amber-50 rounded-xl p-6 border border-amber-200 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-xl" style={{ backgroundColor: '#E8D6B9' }}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-amber-900">
-                Test API: {selectedEndpoint.path}
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      <style jsx>{`
+        .input-field {
+          width: 100%;
+          padding: 0.75rem;
+          border: 1px solid #e2e8f0;
+          border-radius: 0.5rem;
+          background: white;
+          color: #1e293b;
+          font-size: 0.875rem;
+          transition: border-color 0.2s;
+        }
+        .input-field:focus {
+          outline: none;
+          border-color: #3b82f6;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        .btn-primary {
+          background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+          color: white;
+          padding: 0.75rem 1.5rem;
+          border-radius: 0.5rem;
+          font-weight: 500;
+          transition: all 0.2s;
+          border: none;
+          cursor: pointer;
+        }
+        .btn-primary:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        .btn-secondary {
+          background: white;
+          color: #475569;
+          padding: 0.75rem 1.5rem;
+          border: 1px solid #e2e8f0;
+          border-radius: 0.5rem;
+          font-weight: 500;
+          transition: all 0.2s;
+          cursor: pointer;
+        }
+        .btn-secondary:hover {
+          background: #f8fafc;
+          border-color: #cbd5e1;
+        }
+      `}</style>
+
+      {/* Header */}
+      <header className="bg-white shadow-sm border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-4">
+              <Database className="h-8 w-8 text-blue-600" />
+              <h1 className="text-xl font-bold text-slate-900">SwiftPredict</h1>
+            </div>
+            <nav className="hidden md:flex space-x-1">
+              {endpoints.map(endpoint => (
+                <button
+                  key={endpoint.id}
+                  onClick={() => {
+                    if (endpoint.method === 'GET' && !endpoint.params) {
+                      setActiveEndpoint(endpoint.id);
+                      executeEndpoint(endpoint);
+                    } else {
+                      openModal(endpoint);
+                    }
+                  }}
+                  className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    activeEndpoint === endpoint.id
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <endpoint.icon className="h-4 w-4 mr-2" />
+                  {endpoint.name}
+                </button>
+              ))}
+            </nav>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">
+            {currentEndpoint?.name || 'Dashboard'}
+          </h2>
+          <p className="text-slate-600 text-sm">
+            {activeEndpoint === 'dashboard'
+              ? 'Overview of your machine learning experiments'
+              : `${currentEndpoint?.method} endpoint results`}
+          </p>
+        </div>
+
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-700 text-sm">{error}</p>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        ) : (
+          renderTable()
+        )}
+      </main>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">
+                {currentEndpoint?.name}
               </h3>
               <button
-                onClick={() => setSelectedEndpoint(null)}
-                className="text-amber-600 hover:text-amber-800 transition-colors"
+                onClick={() => setShowModal(false)}
+                className="text-slate-400 hover:text-slate-600"
               >
-                <X size={20} />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            {selectedEndpoint.requiresFile && (
-              <div className="mb-4">
-                <label className="block text-amber-800 text-sm font-medium mb-2">
-                  Upload CSV File
-                </label>
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={(e) => setSelectedFile(e.target.files[0])}
-                  className="w-full px-4 py-2 bg-amber-100 border border-amber-300 rounded-lg text-amber-900 focus:border-yellow-600 focus:outline-none"
-                />
-              </div>
-            )}
+            {renderForm(currentEndpoint)}
 
-            {selectedEndpoint.parameters && (
-              <div className="mb-4 space-y-3">
-                <label className="block text-amber-800 text-sm font-medium mb-2">
-                  Parameters
-                </label>
-                {selectedEndpoint.parameters.map((param) => (
-                  <div key={param}>
-                    <label className="block text-amber-700 text-xs mb-1">{param}</label>
-                    {param === 'tags' ? (
-                      <input
-                        type="text"
-                        placeholder="Enter comma-separated tags"
-                        value={formData[param] || ''}
-                        onChange={(e) => {
-                          const tags = e.target.value.split(',').map(tag => tag.trim()).filter(tag => tag);
-                          setFormData({...formData, [param]: tags});
-                        }}
-                        className="w-full px-3 py-2 bg-amber-100 border border-amber-300 rounded text-amber-900 focus:border-yellow-600 focus:outline-none text-sm"
-                      />
-                    ) : param === 'notes' ? (
-                      <textarea
-                        placeholder={`Enter ${param}`}
-                        value={formData[param] || ''}
-                        onChange={(e) => setFormData({...formData, [param]: e.target.value})}
-                        className="w-full px-3 py-2 bg-amber-100 border border-amber-300 rounded text-amber-900 focus:border-yellow-600 focus:outline-none text-sm h-20"
-                      />
-                    ) : (
-                      <input
-                        type={param === 'step' || param === 'value' ? 'number' : 'text'}
-                        placeholder={`Enter ${param}`}
-                        value={formData[param] || ''}
-                        onChange={(e) => setFormData({...formData, [param]: e.target.value})}
-                        className="w-full px-3 py-2 bg-amber-100 border border-amber-300 rounded text-amber-900 focus:border-yellow-600 focus:outline-none text-sm"
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="flex space-x-3 mb-4">
+            <div className="flex justify-end space-x-3 mt-6">
               <button
-                onClick={() => executeApi(selectedEndpoint)}
-                disabled={loading}
-                className="flex items-center px-4 py-2 hover:bg-amber-800 disabled:bg-amber-400 text-white rounded-lg transition-colors duration-200"
-                style={{ backgroundColor: loading ? '#996515' : '#996515' }}
+                onClick={() => setShowModal(false)}
+                className="btn-secondary"
               >
-                {loading ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
-                ) : (
-                  <Send size={16} className="mr-2" />
-                )}
-                Execute
+                Cancel
+              </button>
+              <button
+                onClick={() => executeEndpoint(currentEndpoint)}
+                disabled={loading}
+                className="btn-primary"
+              >
+                {loading ? 'Processing...' : 'Execute'}
               </button>
             </div>
-
-            {apiResponse && (
-              <div>
-                <label className="block text-amber-800 text-sm font-medium mb-2">
-                  Response
-                </label>
-                <pre className="w-full h-64 px-4 py-2 bg-amber-100 border border-amber-300 rounded-lg text-amber-900 overflow-auto font-mono text-sm">
-                  {apiResponse}
-                </pre>
-              </div>
-            )}
           </div>
         </div>
       )}

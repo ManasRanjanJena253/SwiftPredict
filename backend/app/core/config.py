@@ -13,6 +13,8 @@ validator = {
             "tags": {"bsonType": "array",
                      "items": {"bsonType": "string"}
                      },
+            "model_name": {"bsonType": "string"},
+            "project_type": {"bsonType": "string"},
             "notes": {"bsonType": "string"},
             "params": {"bsonType": "array",
                        "items": {"bsonType": "object",
@@ -25,7 +27,8 @@ validator = {
             "metrics": {"bsonType": "object",    # metrics = {metric: Name of the metric, details: {step:[all the steps], value: [ALl the corresponding values]}
                        "required": ["metric", "details"],
                         "properties": {
-                            "metric": {"bsonType": "string"},
+                            "metric": {"bsonType": "array",
+                                       "items": {"bsonType": "string"}},
                             "details": {"bsonType": "object",
                                                  "required": ["step", "value"],
                                                  "properties": {
@@ -34,12 +37,12 @@ validator = {
                                                      "value": {"bsonType": "array",
                                                                "items": {"bsonType": "double"}}
                                                  }}}
-                        }
                         },
             "status": {"bsonType": "string"}
         }
 
     }
+}
 
 def main():
     client = MongoClient(host = "localhost", port = 27017)

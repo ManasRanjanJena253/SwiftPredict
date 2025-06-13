@@ -1,0 +1,1 @@
+{"details":{"step":[0.0,0.0,0.0,0.0],"value":[0.67914305703717048,0.67933674440896208,{"$numberDouble":"NaN"},0.685742832853272]},"metric":["accuracy","f1_score","roc_auc","precision"]}
