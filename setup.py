@@ -5,12 +5,12 @@ setup(
     version='0.1.0',
     author='Manas Ranjan Jena',
     author_email='mranjanjena253@gmail.com',
-    description='A lightweight AutoML and experiment tracking with custom logger, library with FastAPI backend and Python SDK. It works completely locally and just needs excess to your mongodb to log data.',
-    long_description=open('README.md').read(),
+    description='A lightweight AutoML and experiment tracking with custom logger, library with FastAPI backend and Python SDK. It works completely locally and just needs excess to your mongodb to log data.'
+,
     long_description_content_type='text/markdown',
     url='https://github.com/ManasRanjanJena253/SwiftPredict',
-    packages=find_packages(where='backend/app'),
-    package_dir={'': 'backend/app'},
+    packages=find_packages(where='.'),
+    package_dir={'': '.'},
     include_package_data=True,
     install_requires=[
         'fastapi',
@@ -28,11 +28,12 @@ setup(
         'xgboost',
         'lightgbm',
         'scipy',
-        'tqdm'
+        'tqdm',
+        "spacy"
     ],
     entry_points={
         'console_scripts': [
-            'swiftpredict=cli:cli',
+            'swiftpredict=swiftpredict.cli:cli',
         ],
     },
     classifiers=[

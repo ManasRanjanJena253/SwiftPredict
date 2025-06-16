@@ -9,6 +9,7 @@ from io import BytesIO
 import uvicorn
 
 app = FastAPI()
+print("FastAPI is created")
 client = MongoClient(host = "localhost", port = 27017)
 origins = ["http://localhost:3000"]  # matching the React dev port
 
@@ -148,7 +149,7 @@ def fetch_run_id(run_id: str, project_name: str):
     Returns:
         dict: Run details or error message.
     """
-    docs = run.find({"run_id": run_id, "project_name": project_name}, {"model_name": 1, "run_id": 1, "metrics.metric": 1, "created_at": 1, "project_name": 1, "_id": 0}).to_list()
+    docs = list(run.find({"run_id": run_id, "project_name": project_name}, {"model_name": 1, "run_id": 1, "metrics.metric": 1, "created_at": 1, "project_name": 1, "_id": 0}))
     if docs:
         return docs
     else:
@@ -162,13 +163,13 @@ def get_all_dl_projects():
     Returns:
         list or dict: List of project names or an error message.
     """
-    projects = run.find({"project_type": "DL"}, {"model_name": 1, "run_id": 1, "metrics.metric": 1, "created_at": 1, "project_name": 1, "_id": 0}).to_list()
+    projects = list(run.find({"project_type": "DL"}, {"model_name": 1, "run_id": 1, "metrics.metric": 1, "created_at": 1, "project_name": 1, "_id": 0}))
     if projects:
         return projects
     else:
         return {"Error": "No, DL Projects found"}
 
-@app.get("/projects/ml")
+@app.get("/projects/ml-test")
 def get_all_ml_projects():
     """
     Retrieves a list of all distinct project names.
@@ -176,7 +177,8 @@ def get_all_ml_projects():
     Returns:
         list or dict: List of project names or an error message.
     """
-    projects = run.find({"project_type": "ML"}, {"model_name": 1, "run_id": 1, "metrics.metric": 1, "created_at": 1, "project_name": 1, "_id": 0}).to_list()
+    projects = list(run.find({"project_type": "ML"}, {"created_at": 0, "_id": 0}))
+    print(projects)
     if projects:
         return projects
     else:
@@ -272,4 +274,5 @@ def delete_all():
         return {"message": "The data deleted successfully."}
 
 if __name__ == '__main__':
-    uvicorn.run(app, host = '127.0.0.1', port = 8000)
+    print("🚀 Running Uvicorn from __main__")
+    uvicorn.run(app, port = 8000)

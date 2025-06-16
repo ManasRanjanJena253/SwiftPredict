@@ -1,0 +1,12 @@
+LICENSE
+README.md
+pyproject.toml
+setup.py
+./swiftpredict/__init__.py
+./swiftpredict/cli.py
+swiftpredict.egg-info/PKG-INFO
+swiftpredict.egg-info/SOURCES.txt
+swiftpredict.egg-info/dependency_links.txt
+swiftpredict.egg-info/entry_points.txt
+swiftpredict.egg-info/requires.txt
+swiftpredict.egg-info/top_level.txt

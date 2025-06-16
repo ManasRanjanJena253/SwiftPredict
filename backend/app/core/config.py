@@ -58,6 +58,11 @@ def main():
         print("Run collection created")
     else:
         print("The Run collection already exists")
+        run = db["Run"]
+        print("DB:", run.database.name)
+        print("Collection:", run.name)
+        print("Count in collection:", run.count_documents({}))
+        print("Filtered:", list(run.find({"project_type": "ML"})))
 
 if __name__ == "__main__":
     main()

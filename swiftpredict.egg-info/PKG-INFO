@@ -1,0 +1,40 @@
+Metadata-Version: 2.4
+Name: swiftpredict
+Version: 0.1.0
+Summary: A lightweight AutoML and experiment tracking with custom logger, library with FastAPI backend and Python SDK. It works completely locally and just needs excess to your mongodb to log data.
+Home-page: https://github.com/ManasRanjanJena253/SwiftPredict
+Author: Manas Ranjan Jena
+Author-email: mranjanjena253@gmail.com
+Classifier: Development Status :: 3 - Alpha
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: pymongo
+Requires-Dist: click
+Requires-Dist: scikit-learn
+Requires-Dist: matplotlib
+Requires-Dist: seaborn
+Requires-Dist: pandas
+Requires-Dist: numpy
+Requires-Dist: streamlit
+Requires-Dist: requests
+Requires-Dist: imbalanced-learn
+Requires-Dist: xgboost
+Requires-Dist: lightgbm
+Requires-Dist: scipy
+Requires-Dist: tqdm
+Requires-Dist: spacy
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

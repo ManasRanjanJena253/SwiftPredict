@@ -10,7 +10,7 @@ from lightgbm import LGBMRegressor, LGBMClassifier
 from sklearn.model_selection import train_test_split, cross_validate
 from sklearn.metrics import make_scorer, accuracy_score, f1_score, precision_score, roc_auc_score
 from imblearn.over_sampling import SMOTE
-from app.client.swift_predict import SwiftPredict
+from backend.app.client.swift_predict import SwiftPredict
 from statistics import multimode
 import pandas as pd
 import numpy as np
@@ -191,7 +191,7 @@ def model_zoo(task, model = None):
         else:
             return models
 
-def train_model(task, X_train, y_train, logger):
+def train_model(task, X_train, y_train, logger = None):
     """
     Trains multiple models and logs metrics using cross-validation.
 
@@ -211,14 +211,12 @@ def train_model(task, X_train, y_train, logger):
         avg_acc_scores = []
         avg_f1_score = []
         avg_precision = []
-        avg_roc = []
         models = model_zoo(task = task)
         trained_models = {}
         scoring_methods = {
             "accuracy": make_scorer(accuracy_score),
             "f1": make_scorer(f1_score, average = 'weighted', zero_division = 0),
-            "precision": make_scorer(precision_score, average = 'weighted', zero_division = 0),
-            "roc_auc": make_scorer(roc_auc_score, multi_class = 'ovr', average = "weighted")
+            "precision": make_scorer(precision_score, average = 'weighted', zero_division = 0)
         }
         for k in tqdm(models, desc = "Training the Models"):     # Training each classification model in model zoo.
             if k.__name__ != "GaussianNB":
@@ -234,20 +232,16 @@ def train_model(task, X_train, y_train, logger):
             cv = cross_validate(estimator = model, X = X_train, y = y_train, cv = 5, scoring = scoring_methods)
             acc = cv["test_accuracy"]
             f1 = cv["test_f1"]
-            roc = cv["test_roc_auc"]
-            print(roc)
             precision = cv["test_precision"]
             trained_models[str(k)] = model.fit(X_train, y_train)
 
-            for key, value in model.get_params().items():
-                logger.log_param(key = key, value = value, model_name = type(model).__name__)
+            # for key, value in model.get_params().items():
+            #     logger.log_param(key = key, value = value, model_name = type(model).__name__)
+            #
+            # logger.log_or_update_metric(value = acc.mean(), key = "accuracy", model_name = type(model).__name__)
+            # logger.log_or_update_metric(value = f1.mean(), key = "f1_score", model_name = type(model).__name__)
+            # logger.log_or_update_metric(value = precision.mean(), key = "precision", model_name = type(model).__name__)
 
-            logger.log_or_update_metric(value = acc.mean(), key = "accuracy", model_name = type(model).__name__)
-            logger.log_or_update_metric(value = f1.mean(), key = "f1_score", model_name = type(model).__name__)
-            logger.log_or_update_metric(value = roc.mean().item(), key = "roc_auc", model_name = type(model).__name__)
-            logger.log_or_update_metric(value = precision.mean(), key = "precision", model_name = type(model).__name__)
-
-            avg_roc.append(roc.mean())
             avg_precision.append(precision.mean())
             avg_f1_score.append(f1.mean())
             avg_acc_scores.append(acc.mean())
@@ -255,7 +249,6 @@ def train_model(task, X_train, y_train, logger):
         performers = [
             avg_acc_scores.index(max(avg_acc_scores)),
             avg_f1_score.index(max(avg_f1_score)),
-            avg_roc.index(max(avg_roc)),
             avg_precision.index(max(avg_precision))
             ]
 
@@ -267,9 +260,6 @@ def train_model(task, X_train, y_train, logger):
                        "precision": trained_models[
                            str(models[avg_precision.index(max(avg_precision))]
                                )],
-                       "roc_auc": trained_models[
-                           str(models[avg_roc.index(max(avg_roc))]
-                                                     )],
                        "accuracy": trained_models[
                            str(models[avg_acc_scores.index(max(avg_acc_scores))]
                                                       )],
@@ -298,12 +288,12 @@ def train_model(task, X_train, y_train, logger):
             r2 = cv["test_r2"]
             trained_models[str(k)] = model.fit(X_train, y_train)
 
-            for key, value in model.get_params().items():
-                logger.log_param(key = key, value = value, model_name = type(model).__name__)
-
-            logger.log_or_update_metric(value = -1 * neg_mse.mean(), key = "MSE", model_name = type(model).__name__)
-            logger.log_or_update_metric(value = -1 * neg_mae.mean(), key = "MAE", model_name = type(model).__name__)
-            logger.log_or_update_metric(value = r2.mean(), key = "R2", model_name = type(model).__name__)
+            # for key, value in model.get_params().items():
+            #     logger.log_param(key = key, value = value, model_name = type(model).__name__)
+            #
+            # logger.log_or_update_metric(value = -1 * neg_mse.mean(), key = "MSE", model_name = type(model).__name__)
+            # logger.log_or_update_metric(value = -1 * neg_mae.mean(), key = "MAE", model_name = type(model).__name__)
+            # logger.log_or_update_metric(value = r2.mean(), key = "R2", model_name = type(model).__name__)
 
             avg_neg_mse.append(neg_mse.mean())
             avg_neg_mae.append(neg_mae.mean())
@@ -351,9 +341,11 @@ def handle_cat_columns(df, cat_columns, handle_html: bool = False):
     """
     ohe = OneHotEncoder(sparse_output = False, handle_unknown = "ignore")
     ohe_lst = []
-    new_df = df
+    temp_df = df.copy()
+    new_df = df.copy()
     vectorizer_lst = []
     for k in new_df.columns.tolist():
+        index = temp_df.columns.get_loc(k)
         if k in cat_columns:
             num_unique_classes = new_df[k].nunique()
             if num_unique_classes <= 5:  # If the classes in a feature is <= 5, We can use OHE as it won't create dimensionality issue
@@ -362,7 +354,7 @@ def handle_cat_columns(df, cat_columns, handle_html: bool = False):
                 transformed_feature_names = ohe.get_feature_names_out([k])
                 transformed_df = pd.DataFrame(transformed_array, columns = transformed_feature_names)
 
-                ohe_lst.append((new_df.columns.get_loc(k), ohe))
+                ohe_lst.append((index, ohe))
 
                 new_df.drop([k], axis = 1, inplace = True)
                 new_df = pd.concat([new_df, transformed_df], axis = 1)
@@ -370,35 +362,35 @@ def handle_cat_columns(df, cat_columns, handle_html: bool = False):
             else:
                 vectorizer = TfidfVectorizer()
                 print(f"Preprocessing column: {k}")
-                new_df[k] = new_df[k].progress_apply(lambda x: text_preprocessor(x, handle_html=handle_html))
+                new_df[k] = new_df[k].progress_apply(lambda x: text_preprocessor(x, handle_html = handle_html))
 
                 tfidf_array = vectorizer.fit_transform(new_df[k].astype(str))
 
                 # Check if there are at least 2 features to apply SVD
                 if tfidf_array.shape[1] >= 2:
                     max_components = min(300, tfidf_array.shape[1] - 1)  # n_components must be < n_features
-                    svd_temp = TruncatedSVD(n_components=max_components)
+                    svd_temp = TruncatedSVD(n_components = max_components)
                     svd_temp.fit(tfidf_array)
 
                     cumulative_variance = np.cumsum(svd_temp.explained_variance_ratio_)
                     optimal_components = np.searchsorted(cumulative_variance, 0.95) + 1
                     optimal_components = min(optimal_components, max_components)  # Ensure it doesn't exceed limit
 
-                    svd = TruncatedSVD(n_components=optimal_components)
+                    svd = TruncatedSVD(n_components = optimal_components)
                     tfidf_reduced = svd.fit_transform(tfidf_array)
 
                     svd_df = pd.DataFrame(
                         tfidf_reduced,
-                        columns=[f"{k}_svd_{i}" for i in range(tfidf_reduced.shape[1])],
-                        index=new_df.index
+                        columns = [f"{k}_svd_{i}" for i in range(tfidf_reduced.shape[1])],
+                        index = new_df.index
                     )
-                    new_df = pd.concat([new_df, svd_df], axis=1)
+                    new_df = pd.concat([new_df, svd_df], axis = 1)
 
-                    vectorizer_lst.append((new_df.columns.get_loc(k), vectorizer, svd))
+                    vectorizer_lst.append((index, vectorizer, svd))
                 else:
                     print(
                         f"Skipping column '{k}' — Cannot apply SVD.")
-                    vectorizer_lst.append((new_df.columns.get_loc(k), vectorizer, None))
+                    vectorizer_lst.append((index, vectorizer, None))
 
                 # Drop original column
                 new_df.drop(columns=[k], inplace=True)
@@ -427,26 +419,37 @@ def training_pipeline(df, target_column: str, project_name: str, drop_name: bool
                - pd.Series: Test labels.
                - dict: Best model names for each metric.
        """
-    logger = SwiftPredict(project_name = project_name, project_type = "ML")
-    new_df = df
+    #logger = SwiftPredict(project_name = project_name, project_type = "ML")
+    new_df = df.copy()
     target = df[target_column]
+    removed_columns = []
     # Handling categorical labels
 
     if target.dtype == "object":
         lbl_encoder = LabelEncoder()
         new_df[target_column] = lbl_encoder.fit_transform(target)
 
-    """if drop_name:
-        new_df.drop([col for col in new_df.columns.tolist() if col.lower() == "name"], axis = 1, inplace = True)
+    # Handling bool dtypes  and Yes No :
+    new_df.replace(["True", "False"], [1, 0], inplace = True)
+    new_df.replace(["Yes", "No"], [1, 0], inplace = True)
+
+    if drop_name:
+        columns = [col for col in new_df.columns.tolist() if col.lower() == "name"]
+        for k in columns:
+            removed_columns.append(new_df.columns.get_loc(k))
+        new_df.drop(columns, axis = 1, inplace = True)
 
     if drop_id:
-        new_df.drop([col for col in new_df.columns.tolist() if col.lower() == "id" or "index"], axis = 1, inplace = True)"""
+        columns = [col for col in new_df.columns if "id" in col.lower() or "index" in col.lower()]
+        for k in columns:
+            removed_columns.append(new_df.columns.get_loc(k))
+        new_df.drop(columns, axis = 1, inplace = True)
 
     columns = get_dtype_columns(new_df)
     cat_columns = columns["categorical"]
-    #print(cat_columns)  # For debugging
+    # print("Cat Columns : ", cat_columns)  # For debugging
     num_columns = columns["numeric"]
-    #print(num_columns)  # For debugging
+    # print("Num Columns : ", num_columns)  # For debugging
     ohe_lst = []
     vectorizer_lst = []
 
@@ -456,24 +459,25 @@ def training_pipeline(df, target_column: str, project_name: str, drop_name: bool
     # Handling null values
     new_df = handle_null_values(new_df)
 
-    # Handling bool dtypes  and Yes No :
-    new_df.replace(["True", "False"], [1, 0], inplace = True)
-    new_df.replace(["Yes", "No"], [1, 0], inplace = True)
+    removed_columns_name = []
+    not_removed_cat_columns = [col for col in cat_columns if (col not in removed_columns)]
+    # print(f"Not removed cat columns : ", not_removed_cat_columns)
 
     # Handling categorical data
     if cat_columns:
-        new_df, ohe_lst, vectorizer_lst = handle_cat_columns(df = new_df, cat_columns = cat_columns)
+        new_df, ohe_lst, vectorizer_lst = handle_cat_columns(df = new_df, cat_columns = not_removed_cat_columns)
 
     # Removing unnecessary columns
     corr = new_df[[col for col in num_columns if col != target_column]].corr()
     direct_corr = [col for col in corr.columns if
                    corr[col].abs().max() == 1]  # Getting the columns having correlation 1
     useful_col_len = len(direct_corr) // 2
-    removed_columns = []
     while len(direct_corr) > useful_col_len:
         removed_columns.append(new_df.columns.get_loc(direct_corr[- 1]))  # Appending the index of the removed columns
         new_df.drop([direct_corr.pop()], inplace = True, axis = 1)
 
+    # print(f"After removing unnecessary columns : ", new_df.columns.tolist())
+    # print(f"Original df : ", df.columns.tolist())
     new_df = handle_null_values(new_df)   # Ensuring before splitting that no null values are created due to preprocessing.
 
     # Splitting the data
@@ -489,6 +493,6 @@ def training_pipeline(df, target_column: str, project_name: str, drop_name: bool
     if task == "classification":
         X_train, y_train = handle_imbalance(df, target_column = target_column, X_train = X_scaled, y_train = y_train)
 
-    best_models, best_model_showcase = train_model(task = task, X_train = X_train, y_train = y_train, logger = logger)
+    best_models, best_model_showcase = train_model(task = task, X_train = X_train, y_train = y_train)
 
     return best_models, std_scaler, removed_columns, ohe_lst, vectorizer_lst, X_test, y_test, best_model_showcase, new_df

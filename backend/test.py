@@ -16,14 +16,14 @@ scores = cross_val_score(estimator = model, X = X, y = y, cv = 10, scoring = "ac
 
 def main():
     if "logger" not in st.session_state:
-        st.session_state.logger = SwiftPredict(project_name = "Testing Classification Model")
+        st.session_state.logger = SwiftPredict(project_name = "Testing Classification Model", project_type = "ML")
     logger = st.session_state.logger
-    logger.log_params({"model": "LogisticRegression", "penalty": "l2", "max_iter": 500})
+    logger.log_params(model.get_params(), model_name = "LogisticRegression")
     for step, value in enumerate(scores):
-        logger.log_metric(step = step, value = value, key = "accuracy")
+        logger.log_or_update_metric(step = step, value = value, key = "accuracy", model_name = "LogisticRegression")
 
 main()
-base_url = "http://127.0.0.1:9000"
+base_url = "http://127.0.0.1:8000"
 
 st.markdown(
     "<p style='font-size:40px; font-weight:bold;'>SwiftPredict: Your compass from data to discovery</p>",
@@ -49,11 +49,11 @@ if fetch_runs:
         st.dataframe(df)
 
 elif get_projects:
-    response = requests.get(base_url + "/projects")
+    response = requests.get(base_url + "/projects/ml")
 
     data = response.json()
     df = pd.DataFrame(data, columns = ["Projects"])
-    st.dataframe(df)
+    st.text(data)
 
 elif visualize_run:
     project_name = st.text_input("Enter the project name")

@@ -1,9 +1,7 @@
 import pandas as pd
-from preprocessing import training_pipeline, detect_task
 from sklearn.metrics import accuracy_score, f1_score, precision_score, roc_auc_score, mean_squared_error, mean_absolute_error, r2_score
 import pickle
 from typing import Any
-from preprocessing import text_preprocessor
 class AutoML:
     """
     AutoML is a lightweight wrapper class designed to automate data preprocessing,
@@ -54,11 +52,13 @@ class AutoML:
         Returns:
             dict: Dictionary containing the best model names (string) for each metric and the overall best model.
         """
+        from preprocessing import training_pipeline, detect_task
+
         self.project_name = project_name
         self.file_path = file_path
         self.target_column = target_column
         self.data = pd.read_csv(self.file_path)
-        self.task = detect_task(df=self.data, y=self.target_column)
+        self.task = detect_task(df = self.data, y = self.target_column)
 
         self.best_models, self.std_scaler, self.removed_columns, self.ohe_lst, self.vectorizer_lst, self.X_test, self.y_test, best_model_showcase, self.modified_df = (training_pipeline(
             self.data, target_column = self.target_column, project_name = self.project_name, drop_name = drop_name, drop_id = drop_id
@@ -81,31 +81,6 @@ class AutoML:
         with open(model_path, 'wb') as f:
             pickle.dump(model_to_export, f)
 
-    def _preprocessing(self, features: dict) -> Any:
-        """
-        Preprocesses raw input features before prediction, based on the pipeline fitted during training.
-
-        Args:
-            features (dict): Dictionary containing raw input features.
-
-        Returns:
-            np.ndarray: Preprocessed and scaled feature array ready for prediction.
-        """
-        if self.ohe_lst:
-            for k, ohe in self.ohe_lst:
-                features[k] = ohe.transform([features[k]])
-
-        if self.vectorizer_lst :
-            for k, vectorizer, svd in self.vectorizer_lst:
-                features[k] = vectorizer.transform([features[k]])
-                features[k] = svd.transform([features[k]])
-
-        if self.removed_columns:
-            for k in self.removed_columns:
-                features.pop(k, None)
-
-        processed_features = self.std_scaler.transform([features])
-        return processed_features
 
     def evaluate_performance(self, model = None, key: str = None) -> dict:
         """
@@ -127,7 +102,7 @@ class AutoML:
                 return {
                     "accuracy": accuracy_score(self.y_test, y_pred),
                     "f1": f1_score(self.y_test, y_pred, average = "weighted"),
-                    "roc_auc": roc_auc_score(self.y_test, y_pred, average = "weighted", multi_class = "ovr").item(),
+                    "roc_auc": roc_auc_score(self.y_test, y_pred, average = "weighted", multi_class = "ovr"),
                     "precision": precision_score(self.y_test, y_pred, average = "weighted")
                 }
             else:
@@ -144,16 +119,3 @@ class AutoML:
         else:
             raise ValueError("Either a model or key must be provided.")
 
-    def predict(self, model, features: dict) -> Any:
-        """
-        Predicts target values using the trained model on new data.
-
-        Args:
-            model (Any): Trained model instance (e.g., XGBClassifier).
-            features (dict): Raw feature inputs as a dictionary.
-
-        Returns:
-            np.ndarray: Model predictions.
-        """
-        processed_features = self._preprocessing(features = features)
-        return model.predict(processed_features)
