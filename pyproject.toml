@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "swiftpredict-v2"
-version = "0.2.0"
+version = "0.2.1"
 description = "A lightweight AutoML and experiment tracking library with FastAPI backend and Python SDK. Works locally with MongoDB."
 readme = "README.md"
 license = "MIT"

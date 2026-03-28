@@ -18,13 +18,23 @@ from scipy.stats import normaltest
 from tqdm.auto import tqdm
 import warnings
 import string
-import spacy
 import re
 warnings.filterwarnings("ignore")
 
 
 tqdm.pandas(desc = "Preprocessing text")
-nlp = spacy.load("en_core_web_sm", disable=["ner", "parser"])  # Only keep tagger + lemmatizer for speed
+
+import spacy
+from spacy.cli import download
+
+try:
+    # Attempting to load the model
+    nlp = spacy.load("en_core_web_sm", disable=["ner", "parser"])
+except OSError:
+    # If the model isn't found, downloading it automatically
+    print("SwiftPredict: Downloading required spaCy language model (en_core_web_sm)...")
+    download("en_core_web_sm")
+    nlp = spacy.load("en_core_web_sm", disable=["ner", "parser"])   # Only keeping tagger + lemmatizer for speed
 
 def get_dtype_columns(df):
     """
