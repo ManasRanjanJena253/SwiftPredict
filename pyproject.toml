@@ -1,3 +1,44 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "swiftpredict-v2"
+version = "0.2.0"
+description = "A lightweight AutoML and experiment tracking library with FastAPI backend and Python SDK. Works locally with MongoDB."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Manas Ranjan Jena", email = "mranjanjena253@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pymongo",
+    "click",
+    "scikit-learn",
+    "matplotlib",
+    "seaborn",
+    "pandas",
+    "numpy",
+    "requests",
+    "imbalanced-learn",
+    "xgboost",
+    "lightgbm",
+    "scipy",
+    "tqdm",
+    "spacy",
+]
+
+[project.urls]
+Homepage = "https://github.com/ManasRanjanJena253/SwiftPredict"
+
+[project.scripts]
+swiftpredict = "swiftpredict.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["swiftpredict*", "backend*"]
+exclude = ["backend.test", "*.test*"]
+
+[tool.setuptools.package-data]
+"swiftpredict" = ["index.html"]

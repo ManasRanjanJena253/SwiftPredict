@@ -52,7 +52,7 @@ class AutoML:
         Returns:
             dict: Dictionary containing the best model names (string) for each metric and the overall best model.
         """
-        from preprocessing import training_pipeline, detect_task
+        from .preprocessing import training_pipeline, detect_task
 
         self.project_name = project_name
         self.file_path = file_path

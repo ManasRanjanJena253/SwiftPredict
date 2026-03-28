@@ -10,7 +10,7 @@ from lightgbm import LGBMRegressor, LGBMClassifier
 from sklearn.model_selection import train_test_split, cross_validate
 from sklearn.metrics import make_scorer, accuracy_score, f1_score, precision_score, roc_auc_score
 from imblearn.over_sampling import SMOTE
-from backend.app.client.swift_predict import SwiftPredict
+from ..client.swift_predict import SwiftPredict
 from statistics import multimode
 import pandas as pd
 import numpy as np
@@ -68,6 +68,7 @@ def text_preprocessor(text: str, handle_emojis: bool = False, handle_html: bool 
 
     if tokens:
         return " ".join(tokens)
+    return ""
 
 def handle_null_values(df):
     """
@@ -158,7 +159,7 @@ def handle_imbalance(df, target_column : str, X_train, y_train):
     max_data = max(class_counts)
     min_data = min(class_counts)
 
-    if min_data/max_data >= 0.15:  # If the min data is less than 15 % of the max data the dataset will be considered imbalanced.
+    if min_data/max_data < 0.15:  # If the min data is less than 15 % of the max data the dataset will be considered imbalanced.
         smote = SMOTE(random_state = 21)
         X_res, target_res = smote.fit_resample(X_train, y_train)
 
@@ -235,12 +236,12 @@ def train_model(task, X_train, y_train, logger = None):
             precision = cv["test_precision"]
             trained_models[str(k)] = model.fit(X_train, y_train)
 
-            # for key, value in model.get_params().items():
-            #     logger.log_param(key = key, value = value, model_name = type(model).__name__)
-            #
-            # logger.log_or_update_metric(value = acc.mean(), key = "accuracy", model_name = type(model).__name__)
-            # logger.log_or_update_metric(value = f1.mean(), key = "f1_score", model_name = type(model).__name__)
-            # logger.log_or_update_metric(value = precision.mean(), key = "precision", model_name = type(model).__name__)
+            for key, value in model.get_params().items():
+                logger.log_param(key = key, value = value, model_name = type(model).__name__)
+
+            logger.log_or_update_metric(value = acc.mean(), key = "accuracy", model_name = type(model).__name__)
+            logger.log_or_update_metric(value = f1.mean(), key = "f1_score", model_name = type(model).__name__)
+            logger.log_or_update_metric(value = precision.mean(), key = "precision", model_name = type(model).__name__)
 
             avg_precision.append(precision.mean())
             avg_f1_score.append(f1.mean())
@@ -288,12 +289,12 @@ def train_model(task, X_train, y_train, logger = None):
             r2 = cv["test_r2"]
             trained_models[str(k)] = model.fit(X_train, y_train)
 
-            # for key, value in model.get_params().items():
-            #     logger.log_param(key = key, value = value, model_name = type(model).__name__)
-            #
-            # logger.log_or_update_metric(value = -1 * neg_mse.mean(), key = "MSE", model_name = type(model).__name__)
-            # logger.log_or_update_metric(value = -1 * neg_mae.mean(), key = "MAE", model_name = type(model).__name__)
-            # logger.log_or_update_metric(value = r2.mean(), key = "R2", model_name = type(model).__name__)
+            for key, value in model.get_params().items():
+                logger.log_param(key = key, value = value, model_name = type(model).__name__)
+
+            logger.log_or_update_metric(value = -1 * neg_mse.mean(), key = "MSE", model_name = type(model).__name__)
+            logger.log_or_update_metric(value = -1 * neg_mae.mean(), key = "MAE", model_name = type(model).__name__)
+            logger.log_or_update_metric(value = r2.mean(), key = "R2", model_name = type(model).__name__)
 
             avg_neg_mse.append(neg_mse.mean())
             avg_neg_mae.append(neg_mae.mean())
@@ -419,7 +420,7 @@ def training_pipeline(df, target_column: str, project_name: str, drop_name: bool
                - pd.Series: Test labels.
                - dict: Best model names for each metric.
        """
-    #logger = SwiftPredict(project_name = project_name, project_type = "ML")
+    logger = SwiftPredict(project_name = project_name, project_type = "ML")
     new_df = df.copy()
     target = df[target_column]
     removed_columns = []
@@ -483,7 +484,7 @@ def training_pipeline(df, target_column: str, project_name: str, drop_name: bool
     # Splitting the data
     X = new_df.drop([target_column], axis = 1)
     y = new_df[target_column]
-    X_train, X_test, y_train, y_test = train_test_split(X, y, stratify = y, random_state = 21)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, stratify = y if task == "classification" else None, random_state = 21)
 
     # Scaling numerical data
     std_scaler = StandardScaler()
@@ -491,8 +492,8 @@ def training_pipeline(df, target_column: str, project_name: str, drop_name: bool
     X_test = std_scaler.transform(X_test)
 
     if task == "classification":
-        X_train, y_train = handle_imbalance(df, target_column = target_column, X_train = X_scaled, y_train = y_train)
+        X_train, y_train = handle_imbalance(new_df, target_column = target_column, X_train = X_scaled, y_train = y_train)
 
-    best_models, best_model_showcase = train_model(task = task, X_train = X_train, y_train = y_train)
+    best_models, best_model_showcase = train_model(task = task, X_train = X_train, y_train = y_train, logger = logger)
 
     return best_models, std_scaler, removed_columns, ohe_lst, vectorizer_lst, X_test, y_test, best_model_showcase, new_df

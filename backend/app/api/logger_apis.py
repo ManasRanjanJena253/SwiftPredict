@@ -114,7 +114,7 @@ def add_notes(run_id: str, project_name: str, notes: str):
     data = run.find_one({"run_id": run_id, "project_name": project_name})
     if data:
         run.update_one({"run_id": run_id, "project_name": project_name},
-                             {"notes": notes})
+                       {"$set": {"notes": notes}})
         return run.find_one({"run_id": run_id, "project_name": project_name}, {"_id": 0})
     else:
         return {"Error": f"Run_Id : {run_id} or Project: {project_name} DOESN'T EXIST"}
@@ -169,7 +169,7 @@ def get_all_dl_projects():
     else:
         return {"Error": "No, DL Projects found"}
 
-@app.get("/projects/ml-test")
+@app.get("/projects/ml")
 def get_all_ml_projects():
     """
     Retrieves a list of all distinct project names.
@@ -274,5 +274,4 @@ def delete_all():
         return {"message": "The data deleted successfully."}
 
 if __name__ == '__main__':
-    print("🚀 Running Uvicorn from __main__")
     uvicorn.run(app, port = 8000)

@@ -1,9 +1,11 @@
 import click
 import subprocess
 import webbrowser
-import time
-import os
 import sys
+import importlib.resources
+from pathlib import Path
+
+PACKAGE_ROOT = Path(__file__).parent.parent.resolve()
 
 
 @click.group()
@@ -25,43 +27,36 @@ def launch(target):
         click.echo("Invalid target. Try: swiftpredict launch ui")
         return
 
-    click.echo("Launching SwiftPredict backend (FastAPI)...")
+    backend_dir = PACKAGE_ROOT / "backend" / "app"
+
+    if not backend_dir.exists():
+        click.echo(f"Backend directory not found at {backend_dir}.")
+        click.echo("Make sure the package was installed correctly.")
+        return
+
+    click.echo("Starting SwiftPredict backend (FastAPI)...")
     backend_process = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "main:app", "--reload"],
-        cwd=os.path.join(os.getcwd(), "backend", "app"),
+        [sys.executable, "-m", "uvicorn", "api.logger_apis:app", "--reload"],
+        cwd=str(backend_dir),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
+    click.echo("Backend running at http://localhost:8000")
 
-    click.echo("Launching SwiftPredict frontend (Next.js)...")
+    # Resolve index.html from inside the installed package
     try:
-        frontend_process = subprocess.Popen(
-            "npm run dev",
-            shell=True,  # Needed on Windows to resolve npm
-            cwd=os.path.join(os.getcwd(), "frontend"),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-    except Exception as e:
-        click.echo(f"Failed to launch frontend: {e}")
-        backend_process.terminate()
-        return
+        with importlib.resources.path("swiftpredict", "index.html") as ui_path:
+            click.echo(f"Opening UI...")
+            webbrowser.open(Path(ui_path).as_uri())
+    except FileNotFoundError:
+        click.echo("UI file not found inside the package. Try reinstalling swiftpredict.")
 
-    # Give frontend time to initialize, then launch in browser
-    time.sleep(5)
-    webbrowser.open("http://localhost:3000")
-
-    click.echo("SwiftPredict UI launched at http://localhost:3000")
-    click.echo("FastAPI backend running at http://localhost:8000")
-    click.echo("Press Ctrl+C to stop both services...")
+    click.echo("Press Ctrl+C to stop the backend...")
 
     try:
         backend_process.wait()
-        frontend_process.wait()
     except KeyboardInterrupt:
-        click.echo("\nStopping SwiftPredict services...")
+        click.echo("\nStopping SwiftPredict backend...")
         backend_process.terminate()
-        frontend_process.terminate()
         backend_process.wait()
-        frontend_process.wait()
-        click.echo("All processes terminated cleanly.")
+        click.echo("Backend stopped cleanly.")

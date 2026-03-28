@@ -7,10 +7,10 @@ matplotlib
 seaborn
 pandas
 numpy
-streamlit
 requests
 imbalanced-learn
 xgboost
 lightgbm
 scipy
 tqdm
+spacy

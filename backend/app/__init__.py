@@ -4,6 +4,7 @@ from .client.swift_predict import SwiftPredict
 
 __all__ = [
     "AutoML",
+    "handle_null_values",
     "handle_imbalance",
     "handle_cat_columns",
     "detect_task",

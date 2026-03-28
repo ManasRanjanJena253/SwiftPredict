@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SwiftPredict</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink: #1a1a2e;
+    --ink-soft: #4a4a6a;
+    --ink-muted: #8888aa;
+    --surface: #f4f3f0;
+    --surface-card: #faf9f7;
+    --surface-hover: #eeecea;
+    --accent: #5b4fff;
+    --accent-soft: #ede9ff;
+    --accent-glow: rgba(91,79,255,0.12);
+    --green: #1a9e6e;
+    --green-soft: #e4f7f0;
+    --red: #d63b3b;
+    --red-soft: #fdeaea;
+    --amber: #c97d1a;
+    --amber-soft: #fdf3e3;
+    --border: rgba(26,26,46,0.1);
+    --border-strong: rgba(26,26,46,0.18);
+    --radius: 12px;
+    --radius-sm: 7px;
+    --shadow: 0 2px 16px rgba(26,26,46,0.07);
+    --shadow-card: 0 1px 3px rgba(26,26,46,0.06), 0 4px 24px rgba(26,26,46,0.05);
+    --font-display: 'DM Serif Display', Georgia, serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+    --transition: 0.18s ease;
+  }
+
+  html { font-size: 16px; scroll-behavior: smooth; }
+  body {
+    font-family: var(--font-body);
+    background: var(--surface);
+    color: var(--ink);
+    min-height: 100vh;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Layout ── */
+  .shell { display: flex; flex-direction: column; min-height: 100vh; }
+
+  header {
+    background: var(--surface-card);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+  .header-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+    gap: 1.5rem;
+  }
+  .logo {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .logo-name {
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+    line-height: 1;
+  }
+  .logo-tagline {
+    font-size: 0.7rem;
+    color: var(--ink-muted);
+    font-family: var(--font-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex;
+    gap: 2px;
+    background: var(--surface);
+    padding: 3px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+  .tab-btn {
+    font-family: var(--font-body);
+    font-size: 0.82rem;
+    font-weight: 500;
+    padding: 6px 18px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-radius: 7px;
+    color: var(--ink-soft);
+    transition: all var(--transition);
+    white-space: nowrap;
+  }
+  .tab-btn.active {
+    background: var(--surface-card);
+    color: var(--accent);
+    box-shadow: 0 1px 4px rgba(26,26,46,0.08);
+  }
+  .tab-btn:hover:not(.active) { background: var(--surface-hover); color: var(--ink); }
+
+  /* ── Main ── */
+  main {
+    flex: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 2rem;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    padding: 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.25rem;
+  }
+  .card-title {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+
+  /* ── Section ── */
+  .section-hidden { display: none; }
+
+  /* ── Grid ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+  @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  /* ── Project column ── */
+  .col-label {
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .col-label .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: inline-block;
+  }
+  .col-label .dot.green { background: var(--green); }
+
+  .project-list { display: flex; flex-direction: column; gap: 0.5rem; }
+  .project-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.85rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    transition: border-color var(--transition), box-shadow var(--transition);
+  }
+  .project-item:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  .project-item-info { min-width: 0; }
+  .project-item-name {
+    font-weight: 500;
+    font-size: 0.88rem;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .project-item-meta {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--ink-muted);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .project-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+  /* ── Buttons ── */
+  .btn {
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .btn-primary:hover { opacity: 0.88; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-ghost {
+    background: none;
+    color: var(--accent);
+    border-color: var(--border-strong);
+  }
+  .btn-ghost:hover { background: var(--accent-soft); border-color: var(--accent); }
+  .btn-danger {
+    background: none;
+    color: var(--red);
+    border-color: var(--border);
+  }
+  .btn-danger:hover { background: var(--red-soft); border-color: var(--red); }
+  .btn-green {
+    background: none;
+    color: var(--green);
+    border-color: var(--border);
+  }
+  .btn-green:hover { background: var(--green-soft); border-color: var(--green); }
+  .btn-lg {
+    font-size: 0.88rem;
+    padding: 9px 22px;
+    border-radius: var(--radius-sm);
+  }
+  .btn-outline {
+    background: none;
+    color: var(--ink-soft);
+    border-color: var(--border-strong);
+  }
+  .btn-outline:hover { background: var(--surface-hover); color: var(--ink); }
+
+  /* ── Empty state ── */
+  .empty {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--ink-muted);
+    font-size: 0.82rem;
+    font-family: var(--font-mono);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-sm);
+  }
+
+  /* ── Status filter ── */
+  .filter-row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
+
+  /* ── Form controls ── */
+  label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--ink-soft);
+    margin-bottom: 5px;
+    letter-spacing: 0.02em;
+  }
+  input, select, textarea {
+    width: 100%;
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 9px 12px;
+    transition: border-color var(--transition), box-shadow var(--transition);
+    outline: none;
+    appearance: none;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+    background: var(--surface-card);
+  }
+  textarea { resize: vertical; min-height: 96px; }
+  select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238888aa'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+  .form-group { display: flex; flex-direction: column; }
+  .form-group.full { grid-column: 1 / -1; }
+
+  .form-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x: auto; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  thead th {
+    background: var(--surface);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    font-weight: 500;
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface-hover); }
+  tbody td { padding: 10px 14px; color: var(--ink); vertical-align: middle; }
+  .mono { font-family: var(--font-mono); font-size: 0.75rem; color: var(--ink-muted); }
+
+  /* ── Status badge ── */
+  .badge {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .badge-green { background: var(--green-soft); color: var(--green); }
+  .badge-red { background: var(--red-soft); color: var(--red); }
+  .badge-amber { background: var(--amber-soft); color: var(--amber); }
+  .badge-gray { background: var(--surface); color: var(--ink-muted); border: 1px solid var(--border); }
+
+  /* ── Alert messages ── */
+  .alert {
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 0.83rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    animation: fadeSlide 0.22s ease;
+  }
+  @keyframes fadeSlide { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  .alert-error { background: var(--red-soft); color: var(--red); border: 1px solid rgba(214,59,59,0.18); }
+  .alert-success { background: var(--green-soft); color: var(--green); border: 1px solid rgba(26,158,110,0.18); }
+
+  /* ── Spinner overlay ── */
+  .spinner-overlay {
+    position: fixed; inset: 0;
+    background: rgba(244,243,240,0.7);
+    backdrop-filter: blur(3px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 999;
+  }
+  .spinner-box {
+    background: var(--surface-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    box-shadow: var(--shadow);
+  }
+  .spinner {
+    width: 28px; height: 28px;
+    border: 2.5px solid var(--border-strong);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner-label { font-size: 0.8rem; color: var(--ink-muted); font-family: var(--font-mono); }
+
+  /* ── Metrics grid ── */
+  .metrics-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; }
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.9rem 1rem;
+  }
+  .metric-run { font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-muted); margin-bottom: 6px; }
+  .metric-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .metric-pill {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  /* ── Divider ── */
+  .divider { height: 1px; background: var(--border); margin: 1.25rem 0; }
+
+  /* ── Conditional field animation ── */
+  .cond-field { animation: fadeSlide 0.2s ease; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+<header>
+  <div class="header-inner">
+    <div class="logo">
+      <span class="logo-name">SwiftPredict</span>
+      <span class="logo-tagline">your compass from data to discovery</span>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('view')">View Data</button>
+      <button class="tab-btn" onclick="switchTab('log')">Log Data</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div id="msg-area"></div>
+
+  <!-- ══ VIEW TAB ══ -->
+  <div id="tab-view">
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Projects Overview</span>
+        <button class="btn btn-ghost" onclick="fetchProjects()">↺ Refresh</button>
+      </div>
+      <div class="grid-2">
+        <div>
+          <div class="col-label"><span class="dot"></span>Machine Learning</div>
+          <div class="project-list" id="ml-list">
+            <div class="empty">No ML projects found</div>
+          </div>
+        </div>
+        <div>
+          <div class="col-label"><span class="dot green"></span>Deep Learning</div>
+          <div class="project-list" id="dl-list">
+            <div class="empty">No DL projects found</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Filter by Status</span>
+      </div>
+      <div class="filter-row">
+        <select id="status-filter" style="width:auto;min-width:160px">
+          <option value="">Select status…</option>
+          <option value="completed">Completed</option>
+          <option value="running">Running</option>
+          <option value="failed">Failed</option>
+          <option value="pending">Pending</option>
+        </select>
+        <button class="btn btn-primary" onclick="fetchByStatus()">Filter</button>
+      </div>
+      <div id="status-results" class="section-hidden">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Project</th><th>Run ID</th><th>Status</th><th>Created</th>
+            </tr></thead>
+            <tbody id="status-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card section-hidden" id="run-details-card">
+      <div class="card-header">
+        <span class="card-title">Run Details</span>
+        <button class="btn btn-outline btn-lg" style="font-size:0.75rem;padding:5px 12px" onclick="closeCard('run-details-card')">✕</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Project</th><th>Run ID</th><th>Model</th><th>Metrics</th><th>Created</th>
+          </tr></thead>
+          <tbody id="run-details-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card section-hidden" id="metrics-card">
+      <div class="card-header">
+        <span class="card-title">Available Metrics</span>
+        <button class="btn btn-outline btn-lg" style="font-size:0.75rem;padding:5px 12px" onclick="closeCard('metrics-card')">✕</button>
+      </div>
+      <div class="metrics-grid" id="metrics-grid"></div>
+    </div>
+
+  </div>
+
+  <!-- ══ LOG TAB ══ -->
+  <div id="tab-log" class="section-hidden">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Log Data</span>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Project Name *</label>
+          <input type="text" id="f-project" placeholder="my-project">
+        </div>
+        <div class="form-group">
+          <label>Run ID *</label>
+          <input type="text" id="f-runid" placeholder="abc123">
+        </div>
+        <div class="form-group full">
+          <label>Action Type</label>
+          <select id="f-action" onchange="updateFields()">
+            <option value="log_param">Log Parameter</option>
+            <option value="add_tags">Add Tags</option>
+            <option value="update_status">Update Status</option>
+            <option value="add_notes">Add Notes</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- log_param fields -->
+      <div id="fields-log_param" class="cond-field">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Parameter Key *</label>
+            <input type="text" id="f-key" placeholder="learning_rate">
+          </div>
+          <div class="form-group">
+            <label>Parameter Value *</label>
+            <input type="text" id="f-value" placeholder="0.001">
+          </div>
+        </div>
+      </div>
+
+      <!-- add_tags fields -->
+      <div id="fields-add_tags" class="cond-field section-hidden">
+        <div class="form-group">
+          <label>Tags (comma-separated) *</label>
+          <input type="text" id="f-tags" placeholder="baseline, v1, production">
+        </div>
+      </div>
+
+      <!-- update_status fields -->
+      <div id="fields-update_status" class="cond-field section-hidden">
+        <div class="form-group">
+          <label>Status *</label>
+          <select id="f-status">
+            <option value="">Select…</option>
+            <option value="completed">Completed</option>
+            <option value="running">Running</option>
+            <option value="failed">Failed</option>
+            <option value="pending">Pending</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- add_notes fields -->
+      <div id="fields-add_notes" class="cond-field section-hidden">
+        <div class="form-group">
+          <label>Notes *</label>
+          <textarea id="f-notes" placeholder="Run observations, conclusions…"></textarea>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-outline btn-lg" onclick="clearForm()">Clear</button>
+        <button class="btn btn-primary btn-lg" id="submit-btn" onclick="submitLog()">Submit</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<!-- Spinner -->
+<div class="spinner-overlay section-hidden" id="spinner">
+  <div class="spinner-box">
+    <div class="spinner"></div>
+    <span class="spinner-label">Loading…</span>
+  </div>
+</div>
+
+<script>
+const API = 'http://127.0.0.1:8000';
+
+// ── State ──────────────────────────────────────────────────
+let activeTab = 'view';
+
+// ── Utilities ─────────────────────────────────────────────
+function show(id) { document.getElementById(id).classList.remove('section-hidden'); }
+function hide(id) { document.getElementById(id).classList.add('section-hidden'); }
+function toggle(id, on) { on ? show(id) : hide(id); }
+function closeCard(id) { hide(id); }
+
+function loading(on) { toggle('spinner', on); }
+
+function msg(text, type = 'error') {
+  const el = document.getElementById('msg-area');
+  if (!text) { el.innerHTML = ''; return; }
+  const icon = type === 'error' ? '⚠' : '✓';
+  el.innerHTML = `<div class="alert alert-${type}">${icon} ${text}</div>`;
+  setTimeout(() => { el.innerHTML = ''; }, 5000);
+}
+
+function badgeHtml(status) {
+  const map = { completed: 'green', failed: 'red', running: 'amber', pending: 'gray' };
+  const cls = map[status] || 'gray';
+  return `<span class="badge badge-${cls}">${status || '—'}</span>`;
+}
+
+function fmtDate(val) {
+  if (!val) return '—';
+  try { return new Date(val).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }); }
+  catch { return val; }
+}
+
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(API + path, opts);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ── Tab switching ──────────────────────────────────────────
+function switchTab(tab) {
+  activeTab = tab;
+  msg('');
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  toggle('tab-view', tab === 'view');
+  toggle('tab-log', tab === 'log');
+}
+
+// ── Projects ───────────────────────────────────────────────
+async function fetchProjects() {
+  loading(true); msg('');
+  try {
+    const [ml, dl] = await Promise.all([
+      apiFetch('/projects/ml').catch(() => []),
+      apiFetch('/projects/dl').catch(() => [])
+    ]);
+    renderProjects('ml-list', Array.isArray(ml) ? ml : [], false);
+    renderProjects('dl-list', Array.isArray(dl) ? dl : [], true);
+  } catch(e) {
+    msg('Failed to fetch projects: ' + e.message);
+  } finally { loading(false); }
+}
+
+function renderProjects(listId, items, isDL) {
+  const el = document.getElementById(listId);
+  if (!items.length) {
+    el.innerHTML = '<div class="empty">No projects found</div>';
+    return;
+  }
+  el.innerHTML = items.map(p => `
+    <div class="project-item">
+      <div class="project-item-info">
+        <div class="project-item-name">${p.project_name || '—'}</div>
+        <div class="project-item-meta">run: ${p.run_id || '—'}${p.model_name ? ' · ' + p.model_name : ''}</div>
+      </div>
+      <div class="project-actions">
+        <button class="btn btn-ghost" onclick="fetchRunDetails('${p.project_name}','${p.run_id}')">Details</button>
+        ${isDL ? `<button class="btn btn-green" onclick="fetchMetrics('${p.project_name}')">Metrics</button>` : ''}
+        <button class="btn btn-danger" onclick="deleteProject('${p.project_name}','${p.run_id}')">Delete</button>
+      </div>
+    </div>`).join('');
+}
+
+// ── Run details ────────────────────────────────────────────
+async function fetchRunDetails(project, runId) {
+  loading(true); msg('');
+  try {
+    const data = await apiFetch(`/${project}/runs/${runId}`);
+    const rows = Array.isArray(data) ? data : [];
+    if (!rows.length) { msg('No details found for this run.'); return; }
+    document.getElementById('run-details-tbody').innerHTML = rows.map(r => `
+      <tr>
+        <td>${r.project_name || '—'}</td>
+        <td class="mono">${r.run_id || '—'}</td>
+        <td>${r.model_name || '—'}</td>
+        <td>${Array.isArray(r.metrics?.metric) ? r.metrics.metric.map(m=>`<span class="metric-pill">${m}</span>`).join(' ') : '—'}</td>
+        <td class="mono">${fmtDate(r.created_at)}</td>
+      </tr>`).join('');
+    show('run-details-card');
+    document.getElementById('run-details-card').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch(e) { msg('Failed to fetch run details: ' + e.message); }
+  finally { loading(false); }
+}
+
+// ── Metrics ────────────────────────────────────────────────
+async function fetchMetrics(project) {
+  loading(true); msg('');
+  try {
+    const data = await apiFetch(`/${project}/plots/available_metrics`);
+    const items = data.all_available_metrics || [];
+    document.getElementById('metrics-grid').innerHTML = items.length
+      ? items.map(m => `
+          <div class="metric-card">
+            <div class="metric-run">run: ${m.run_id}</div>
+            <div class="metric-list">
+              ${(Array.isArray(m.metrics?.metric) ? m.metrics.metric : [m.metrics?.metric]).filter(Boolean).map(k=>`<span class="metric-pill">${k}</span>`).join('')}
+            </div>
+          </div>`).join('')
+      : '<div class="empty">No metrics logged yet</div>';
+    show('metrics-card');
+    document.getElementById('metrics-card').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch(e) { msg('Failed to fetch metrics: ' + e.message); }
+  finally { loading(false); }
+}
+
+// ── Filter by status ───────────────────────────────────────
+async function fetchByStatus() {
+  const status = document.getElementById('status-filter').value;
+  if (!status) { msg('Please select a status first.'); return; }
+  loading(true); msg('');
+  try {
+    const data = await apiFetch(`/projects/${status}`);
+    const rows = data.data || [];
+    if (!rows.length) { hide('status-results'); msg(data.message || 'No projects with that status.', 'success'); return; }
+    document.getElementById('status-tbody').innerHTML = rows.map(p => `
+      <tr>
+        <td>${p.project_name || '—'}</td>
+        <td class="mono">${p.run_id || '—'}</td>
+        <td>${badgeHtml(p.status)}</td>
+        <td class="mono">${fmtDate(p.created_at)}</td>
+      </tr>`).join('');
+    show('status-results');
+  } catch(e) { msg('Failed to filter projects: ' + e.message); }
+  finally { loading(false); }
+}
+
+// ── Delete ─────────────────────────────────────────────────
+async function deleteProject(project, runId) {
+  const target = runId ? 'this run' : 'this entire project';
+  if (!confirm(`Delete ${target}? This cannot be undone.`)) return;
+  loading(true); msg('');
+  try {
+    const params = runId
+      ? `project_name=${encodeURIComponent(project)}&run_id=${encodeURIComponent(runId)}`
+      : `project_name=${encodeURIComponent(project)}`;
+    const data = await apiFetch(`/projects/delete?${params}`, { method: 'DELETE' });
+    msg(data.deleted || 'Deleted successfully.', 'success');
+    fetchProjects();
+  } catch(e) { msg('Failed to delete: ' + e.message); }
+  finally { loading(false); }
+}
+
+// ── Log form ───────────────────────────────────────────────
+const actionFields = ['log_param','add_tags','update_status','add_notes'];
+
+function updateFields() {
+  const action = document.getElementById('f-action').value;
+  actionFields.forEach(a => toggle('fields-' + a, a === action));
+}
+
+function clearForm() {
+  ['f-project','f-runid','f-key','f-value','f-tags','f-notes'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('f-action').value = 'log_param';
+  document.getElementById('f-status').value = '';
+  updateFields();
+  msg('');
+}
+
+async function submitLog() {
+  const project = document.getElementById('f-project').value.trim();
+  const runId   = document.getElementById('f-runid').value.trim();
+  const action  = document.getElementById('f-action').value;
+
+  if (!project || !runId) { msg('Project name and Run ID are required.'); return; }
+
+  let url = '', opts = { method: 'POST', headers: { 'Content-Type': 'application/json' } };
+
+  if (action === 'log_param') {
+    const key = document.getElementById('f-key').value.trim();
+    const val = document.getElementById('f-value').value.trim();
+    if (!key || !val) { msg('Key and value are required.'); return; }
+    url = `/${project}/runs/${runId}/log_param?key=${encodeURIComponent(key)}&value=${encodeURIComponent(val)}`;
+  } else if (action === 'add_tags') {
+    const raw = document.getElementById('f-tags').value.trim();
+    if (!raw) { msg('At least one tag is required.'); return; }
+    url = `/${project}/runs/${runId}/add_tags`;
+    opts.body = JSON.stringify(raw.split(',').map(t => t.trim()).filter(Boolean));
+  } else if (action === 'update_status') {
+    const status = document.getElementById('f-status').value;
+    if (!status) { msg('Please select a status.'); return; }
+    url = `/${project}/runs/${runId}/update_status?status=${encodeURIComponent(status)}`;
+  } else if (action === 'add_notes') {
+    const notes = document.getElementById('f-notes').value.trim();
+    if (!notes) { msg('Notes cannot be empty.'); return; }
+    url = `/${project}/runs/${runId}/add_notes?notes=${encodeURIComponent(notes)}`;
+  }
+
+  loading(true); msg('');
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+
+  try {
+    const data = await apiFetch(url, opts);
+    if (data.Error) { msg(data.Error); }
+    else { msg('Action completed successfully.', 'success'); clearForm(); }
+  } catch(e) { msg('Failed to submit: ' + e.message); }
+  finally {
+    loading(false);
+    btn.disabled = false; btn.textContent = 'Submit';
+  }
+}
+
+// ── Init ───────────────────────────────────────────────────
+fetchProjects();
+</script>
+</body>
+</html>
