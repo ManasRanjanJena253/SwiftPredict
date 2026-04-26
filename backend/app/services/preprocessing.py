@@ -7,6 +7,7 @@ from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from xgboost import XGBRegressor, XGBClassifier
 from lightgbm import LGBMRegressor, LGBMClassifier
+from catboost import CatBoostClassifier, CatBoostRegressor  # Importing CatBoost models for classification and regression
 from sklearn.model_selection import train_test_split, cross_validate
 from sklearn.metrics import make_scorer, accuracy_score, f1_score, precision_score, roc_auc_score
 from imblearn.over_sampling import SMOTE
@@ -190,13 +191,13 @@ def model_zoo(task, model = None):
         list: List of model classes corresponding to the task.
     """
     if task == "classification":
-        models = [GaussianNB, XGBClassifier, RandomForestClassifier, LGBMClassifier, LogisticRegression]
+        models = [GaussianNB, XGBClassifier, RandomForestClassifier, LGBMClassifier, LogisticRegression, CatBoostClassifier]
         if model:
             return models.append(model)
         else:
             return models
     else:
-        models = [LinearRegression, XGBRegressor, LGBMRegressor, RandomForestRegressor]
+        models = [LinearRegression, XGBRegressor, LGBMRegressor, RandomForestRegressor, CatBoostRegressor]
         if model:
             return models.append(model)
         else:
@@ -235,6 +236,8 @@ def train_model(task, X_train, y_train, logger = None):
                     model = k(verbose = -1, n_jobs = -1)
                 elif k.__name__ == "LogisticRegression":
                     model = k(solver = "saga", n_jobs = -1)
+                elif k.__name__ == "CatBoostClassifier":
+                    model = k(verbose = 0)
                 else:
                     model = k(n_jobs=-1)
             else :
@@ -507,3 +510,5 @@ def training_pipeline(df, target_column: str, project_name: str, drop_name: bool
     best_models, best_model_showcase = train_model(task = task, X_train = X_train, y_train = y_train, logger = logger)
 
     return best_models, std_scaler, removed_columns, ohe_lst, vectorizer_lst, X_test, y_test, best_model_showcase, new_df
+
+
